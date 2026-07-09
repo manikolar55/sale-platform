@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import engine, SessionLocal, Base
-from app.routers import auth, users, categories, suppliers, products, sales, expenses, reports, settings as settings_router, dashboard
+from app.routers import auth, users, categories, suppliers, products, sales, expenses, reports, settings as settings_router, dashboard, backup
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -94,6 +94,7 @@ app.include_router(expenses.router)
 app.include_router(reports.router)
 app.include_router(settings_router.router)
 app.include_router(dashboard.router)
+app.include_router(backup.router)
 
 
 @app.get("/api/health")

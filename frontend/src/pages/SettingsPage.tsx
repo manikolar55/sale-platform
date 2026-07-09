@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { settingsApi, usersApi } from '../services/api'
-import { Save, Database, RefreshCw, Plus, Pencil, Trash2, Shield } from 'lucide-react'
+import { settingsApi, usersApi, backupApi } from '../services/api'
+import { Save, Database, RefreshCw, Plus, Pencil, Trash2, Shield, Download, Upload } from 'lucide-react'
 import { TableLoader } from '../components/ui/Loader'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -370,6 +370,90 @@ function SystemTab({ settings }: { settings: Record<string, string> }) {
   )
 }
 
+function BackupTab() {
+  const [restoring, setRestoring] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  const handleExport = async () => {
+    setDownloading(true)
+    try {
+      const res = await backupApi.export()
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `inventory-backup-${new Date().toISOString().split('T')[0]}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Backup downloaded successfully')
+    } catch {
+      toast.error('Failed to create backup')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setRestoring(true)
+    try {
+      await backupApi.import(file)
+      toast.success('Data restored successfully — refresh the page')
+    } catch {
+      toast.error('Failed to restore backup')
+    } finally {
+      setRestoring(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div className="space-y-4 max-w-xl">
+      {/* Backup */}
+      <div className="p-5 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+            <Download className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <div className="font-medium text-gray-800">Download Backup</div>
+            <div className="text-sm text-gray-500 mt-0.5">
+              Exports all products, sales, expenses & settings as a JSON file
+            </div>
+          </div>
+        </div>
+        <button onClick={handleExport} disabled={downloading} className="btn-primary whitespace-nowrap">
+          {downloading ? 'Downloading...' : 'Download Backup'}
+        </button>
+      </div>
+
+      {/* Restore */}
+      <div className="p-5 bg-orange-50 border border-orange-100 rounded-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+            <Upload className="w-5 h-5 text-orange-600" />
+          </div>
+          <div>
+            <div className="font-medium text-gray-800">Restore from Backup</div>
+            <div className="text-sm text-gray-500 mt-0.5">
+              Upload a backup JSON file to restore your data
+            </div>
+          </div>
+        </div>
+        <label className={`btn-secondary whitespace-nowrap cursor-pointer ${restoring ? 'opacity-50 pointer-events-none' : ''}`}>
+          {restoring ? 'Restoring...' : 'Choose File'}
+          <input type="file" accept=".json" className="hidden" onChange={handleImport} disabled={restoring} />
+        </label>
+      </div>
+
+      <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700">
+        <strong>Tip:</strong> Download a backup before making big changes. If something goes wrong,
+        just restore from the backup file to get all your data back instantly.
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('General')
 
@@ -415,22 +499,7 @@ export default function SettingsPage() {
             {activeTab === 'Store Settings' && <GeneralTab settings={settings} />}
             {activeTab === 'User Management' && <UserManagementTab />}
             {activeTab === 'Backup & Restore' && (
-              <div className="space-y-4">
-                <div className="p-5 bg-gray-50 rounded-xl flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-gray-800">Backup Data</div>
-                    <div className="text-sm text-gray-500 mt-0.5">Create a complete backup of your inventory data</div>
-                  </div>
-                  <button className="btn-primary">Create Backup</button>
-                </div>
-                <div className="p-5 bg-gray-50 rounded-xl flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-gray-800">Restore Data</div>
-                    <div className="text-sm text-gray-500 mt-0.5">Restore data from a previous backup file</div>
-                  </div>
-                  <button className="btn-secondary">Restore</button>
-                </div>
-              </div>
+              <BackupTab />
             )}
             {activeTab === 'Notifications' && (
               <div className="space-y-4">

@@ -131,6 +131,16 @@ export const settingsApi = {
   bulkUpdate: (settings: Record<string, unknown>) => api.put('/settings/bulk', { settings }),
 }
 
+// Backup
+export const backupApi = {
+  export: () => api.get('/backup/export', { responseType: 'blob' }),
+  import: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/backup/import', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+}
+
 // Users
 export const usersApi = {
   list: (params?: Record<string, unknown>) => api.get('/users', { params }),

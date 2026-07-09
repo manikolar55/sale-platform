@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend
 } from 'recharts'
-import { ChevronDown, Download } from 'lucide-react'
+import { ChevronDown, Download, FileText } from 'lucide-react'
 import { reportsApi, salesApi, expensesApi, productsApi } from '../services/api'
 import { formatCurrency, formatShortDate } from '../utils/format'
 import Loader from '../components/ui/Loader'
@@ -31,6 +31,26 @@ function downloadCSV(filename: string, rows: string[][]) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function downloadPDF(filename: string, title: string, head: string[], rows: (string | number)[][]) {
+  const { default: jsPDF } = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+  const doc = new jsPDF({ orientation: 'landscape' })
+  doc.setFontSize(16)
+  doc.text(title, 14, 15)
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text(`Generated: ${new Date().toLocaleString('en-PK')}`, 14, 22)
+  autoTable(doc, {
+    head: [head],
+    body: rows.map(r => r.map(String)),
+    startY: 28,
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  })
+  doc.save(filename)
 }
 
 export default function ReportsPage() {
@@ -79,44 +99,64 @@ export default function ReportsPage() {
     enabled: activeTab === 'Stock Report',
   })
 
-  const handleExport = () => {
+  const getReportData = () => {
     if (activeTab === 'Sales Report' && salesData?.items) {
-      downloadCSV('sales-report.csv', [
-        ['Invoice', 'Date', 'Market', 'Customer', 'Items', 'Total (PKR)', 'Profit (PKR)', 'Payment'],
-        ...salesData.items.map((s: any) => [
+      return {
+        filename: 'sales-report',
+        title: 'Sales Report',
+        head: ['Invoice', 'Date', 'Market', 'Customer', 'Items', 'Total (PKR)', 'Profit (PKR)', 'Payment'],
+        rows: salesData.items.map((s: any) => [
           s.invoice_number, formatShortDate(s.sale_date),
           s.market_name || '', s.customer_name || '',
           s.item_count, s.total, s.profit, s.payment_method,
         ]),
-      ])
+      }
     } else if (activeTab === 'Expense Report' && expensesData?.items) {
-      downloadCSV('expense-report.csv', [
-        ['Date', 'Category', 'Description', 'Quantity', 'Unit', 'Vendor', 'Amount (PKR)', 'Payment'],
-        ...expensesData.items.map((e: any) => [
+      return {
+        filename: 'expense-report',
+        title: 'Expense Report',
+        head: ['Date', 'Category', 'Description', 'Qty', 'Unit', 'Vendor', 'Amount (PKR)', 'Payment'],
+        rows: expensesData.items.map((e: any) => [
           formatShortDate(e.expense_date), e.category?.name || '',
           e.description, e.quantity || '', e.unit || '', e.vendor || '',
           e.amount, e.payment_method,
         ]),
-      ])
+      }
     } else if (activeTab === 'Stock Report' && stockData?.items) {
-      downloadCSV('stock-report.csv', [
-        ['Product', 'Category', 'Stock', 'Unit', 'Min Stock', 'Purchase Price', 'Sale Price', 'Status'],
-        ...stockData.items.map((p: any) => [
+      return {
+        filename: 'stock-report',
+        title: 'Stock Report',
+        head: ['Product', 'Category', 'Stock', 'Unit', 'Min Stock', 'Purchase Price', 'Sale Price', 'Status'],
+        rows: stockData.items.map((p: any) => [
           p.name, p.category?.name || '', p.stock, p.unit, p.min_stock,
           p.purchase_price, p.sale_price,
           p.stock === 0 ? 'Out of Stock' : p.stock < p.min_stock ? 'Low Stock' : 'In Stock',
         ]),
-      ])
-    } else if (activeTab === 'Overview' || activeTab === 'Profit & Loss') {
-      downloadCSV('profit-loss-report.csv', [
-        ['Metric', 'Amount (PKR)'],
-        ['Total Sales', overview?.total_sales || 0],
-        ['Total Purchases (Cost)', overview?.total_purchases || 0],
-        ['Gross Profit', overview?.gross_profit || 0],
-        ['Total Expenses', overview?.total_expenses || 0],
-        ['Net Profit', overview?.net_profit || 0],
-      ])
+      }
+    } else {
+      return {
+        filename: 'profit-loss-report',
+        title: 'Profit & Loss Report',
+        head: ['Metric', 'Amount (PKR)'],
+        rows: [
+          ['Total Sales', overview?.total_sales || 0],
+          ['Total Purchases (Cost)', overview?.total_purchases || 0],
+          ['Gross Profit', overview?.gross_profit || 0],
+          ['Total Expenses', overview?.total_expenses || 0],
+          ['Net Profit', overview?.net_profit || 0],
+        ],
+      }
     }
+  }
+
+  const handleExport = () => {
+    const { filename, head, rows } = getReportData()
+    downloadCSV(`${filename}.csv`, [head, ...rows])
+  }
+
+  const handleExportPDF = () => {
+    const { filename, title, head, rows } = getReportData()
+    downloadPDF(`${filename}.pdf`, title, head, rows)
   }
 
   if (overviewLoading) return <Loader />
@@ -148,9 +188,14 @@ export default function ReportsPage() {
             <span className="text-gray-400">—</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input-field text-sm w-40" />
           </div>
-          <button onClick={handleExport} className="btn-secondary ml-auto gap-1.5 text-sm">
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={handleExport} className="btn-secondary gap-1.5 text-sm">
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+            <button onClick={handleExportPDF} className="btn-primary gap-1.5 text-sm">
+              <FileText className="w-4 h-4" /> Export PDF
+            </button>
+          </div>
         </div>
 
         <div className="p-5">

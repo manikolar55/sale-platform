@@ -63,7 +63,6 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
         <div className="hidden sm:flex items-center gap-2 text-sm text-gray-500">
           <Calendar className="w-4 h-4" />
           <span>{today}</span>
-          <ChevronDown className="w-3 h-3" />
         </div>
 
         <div className="relative" ref={dropdownRef}>
