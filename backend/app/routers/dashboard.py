@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case, and_
 from datetime import datetime, timezone, timedelta
 from app.database import get_db
-from app.models.sale import Sale
+from app.models.sale import Sale, SaleItem
 from app.models.expense import Expense
 from app.models.product import Product
 from app.utils.deps import get_current_user
@@ -18,51 +18,49 @@ def dashboard_stats(db: Session = Depends(get_db), _: User = Depends(get_current
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    # Previous month window
     prev_month_end = month_start
     prev_month_start = (month_start - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    total_products = db.query(Product).filter(Product.is_active == True).count()
-    low_stock_count = db.query(Product).filter(
-        Product.is_active == True, Product.stock < 10
-    ).count()
+    # 1 query for all product counts
+    product_row = db.query(
+        func.count(Product.id).label('total'),
+        func.sum(case((and_(Product.is_active == True, Product.stock < 10), 1), else_=0)).label('low_stock'),
+    ).filter(Product.is_active == True).first()
 
-    today_sales = db.query(func.sum(Sale.total)).filter(Sale.sale_date >= today_start).scalar() or 0
-    yesterday_sales = db.query(func.sum(Sale.total)).filter(
-        Sale.sale_date >= yesterday_start, Sale.sale_date < today_start
-    ).scalar() or 0
+    # 1 query for all sale aggregations
+    sale_row = db.query(
+        func.sum(case((Sale.sale_date >= today_start, Sale.total), else_=0)).label('today_sales'),
+        func.sum(case((and_(Sale.sale_date >= yesterday_start, Sale.sale_date < today_start), Sale.total), else_=0)).label('yesterday_sales'),
+        func.sum(case((Sale.sale_date >= month_start, Sale.total), else_=0)).label('monthly_sales'),
+        func.sum(case((and_(Sale.sale_date >= prev_month_start, Sale.sale_date < prev_month_end), Sale.total), else_=0)).label('prev_monthly_sales'),
+        func.sum(case((Sale.sale_date >= month_start, Sale.profit), else_=0)).label('monthly_profit'),
+        func.sum(case((and_(Sale.sale_date >= prev_month_start, Sale.sale_date < prev_month_end), Sale.profit), else_=0)).label('prev_monthly_profit'),
+    ).first()
 
-    monthly_sales = db.query(func.sum(Sale.total)).filter(Sale.sale_date >= month_start).scalar() or 0
-    prev_monthly_sales = db.query(func.sum(Sale.total)).filter(
-        Sale.sale_date >= prev_month_start, Sale.sale_date < prev_month_end
-    ).scalar() or 0
+    # 1 query for all expense aggregations
+    exp_row = db.query(
+        func.sum(case((Expense.expense_date >= month_start, Expense.amount), else_=0)).label('total_expenses'),
+        func.sum(case((and_(Expense.expense_date >= prev_month_start, Expense.expense_date < prev_month_end), Expense.amount), else_=0)).label('prev_total_expenses'),
+    ).first()
 
-    monthly_profit = db.query(func.sum(Sale.profit)).filter(Sale.sale_date >= month_start).scalar() or 0
-    prev_monthly_profit = db.query(func.sum(Sale.profit)).filter(
-        Sale.sale_date >= prev_month_start, Sale.sale_date < prev_month_end
-    ).scalar() or 0
-
-    total_expenses = db.query(func.sum(Expense.amount)).filter(Expense.expense_date >= month_start).scalar() or 0
-    prev_total_expenses = db.query(func.sum(Expense.amount)).filter(
-        Expense.expense_date >= prev_month_start, Expense.expense_date < prev_month_end
-    ).scalar() or 0
-
-    net_profit = float(monthly_profit) - float(total_expenses)
-    prev_net_profit = float(prev_monthly_profit) - float(prev_total_expenses)
+    monthly_profit = float(sale_row.monthly_profit or 0)
+    prev_monthly_profit = float(sale_row.prev_monthly_profit or 0)
+    total_expenses = float(exp_row.total_expenses or 0)
+    prev_total_expenses = float(exp_row.prev_total_expenses or 0)
 
     return {
-        "total_products": total_products,
-        "low_stock_count": low_stock_count,
-        "today_sales": float(today_sales),
-        "yesterday_sales": float(yesterday_sales),
-        "monthly_sales": float(monthly_sales),
-        "prev_monthly_sales": float(prev_monthly_sales),
-        "total_profit": float(monthly_profit),
-        "prev_total_profit": float(prev_monthly_profit),
-        "total_expenses": float(total_expenses),
-        "prev_total_expenses": float(prev_total_expenses),
-        "net_profit": net_profit,
-        "prev_net_profit": prev_net_profit,
+        "total_products": int(product_row.total or 0),
+        "low_stock_count": int(product_row.low_stock or 0),
+        "today_sales": float(sale_row.today_sales or 0),
+        "yesterday_sales": float(sale_row.yesterday_sales or 0),
+        "monthly_sales": float(sale_row.monthly_sales or 0),
+        "prev_monthly_sales": float(sale_row.prev_monthly_sales or 0),
+        "total_profit": monthly_profit,
+        "prev_total_profit": prev_monthly_profit,
+        "total_expenses": total_expenses,
+        "prev_total_expenses": prev_total_expenses,
+        "net_profit": monthly_profit - total_expenses,
+        "prev_net_profit": prev_monthly_profit - prev_total_expenses,
     }
 
 
@@ -95,7 +93,18 @@ def low_stock_products(
 
 @router.get("/recent-sales")
 def recent_sales(limit: int = 8, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    sales = db.query(Sale).order_by(Sale.sale_date.desc()).limit(limit).all()
+    item_count_sub = (
+        db.query(SaleItem.sale_id, func.count(SaleItem.id).label("cnt"))
+        .group_by(SaleItem.sale_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Sale, func.coalesce(item_count_sub.c.cnt, 0).label("item_count"))
+        .outerjoin(item_count_sub, item_count_sub.c.sale_id == Sale.id)
+        .order_by(Sale.sale_date.desc())
+        .limit(limit)
+        .all()
+    )
     return [
         {
             "id": s.id,
@@ -105,7 +114,7 @@ def recent_sales(limit: int = 8, db: Session = Depends(get_db), _: User = Depend
             "total": float(s.total),
             "profit": float(s.profit),
             "sale_date": s.sale_date.isoformat(),
-            "item_count": len(s.items),
+            "item_count": cnt,
         }
-        for s in sales
+        for s, cnt in rows
     ]
