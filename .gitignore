@@ -31,7 +31,6 @@ backend/uploads/
 
 # ── Logs ─────────────────────────────────────────────
 *.log
-*.txt
 uvicorn_out.txt
 uvicorn_err.txt
 
