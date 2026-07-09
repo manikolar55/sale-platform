@@ -148,15 +148,23 @@ def get_sale(sale_id: int, db: Session = Depends(get_db), _: User = Depends(get_
 
     response = SaleResponse.model_validate(sale)
 
+    # find customer by id, or fall back to matching by name
+    customer = None
     if sale.customer_id:
         customer = db.query(Customer).filter(Customer.id == sale.customer_id).first()
-        if customer:
+    elif sale.customer_name:
+        customer = db.query(Customer).filter(
+            func.lower(Customer.name) == sale.customer_name.strip().lower(),
+            Customer.is_active == True,
+        ).first()
+
+    if customer:
             total_credit = db.query(func.sum(Sale.total)).filter(
-                Sale.customer_id == sale.customer_id,
+                Sale.customer_id == customer.id,
                 Sale.is_credit == True,
             ).scalar() or 0
             total_paid = db.query(func.sum(CustomerPayment.amount)).filter(
-                CustomerPayment.customer_id == sale.customer_id,
+                CustomerPayment.customer_id == customer.id,
             ).scalar() or 0
             current_balance = float(total_credit) - float(total_paid)
             # prev = balance before this sale (undo this sale's effect)

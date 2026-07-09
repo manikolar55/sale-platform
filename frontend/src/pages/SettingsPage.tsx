@@ -133,6 +133,7 @@ function StoreSideSettings({ settings }: { settings: Record<string, string> }) {
   const [autoDeductStock, setAutoDeductStock] = useState(settings.auto_deduct_stock !== 'false')
   const [invoicePrefix, setInvoicePrefix] = useState(settings.invoice_prefix || 'INV')
   const [defaultTax, setDefaultTax] = useState(settings.default_tax || '0')
+  const [monthlyBudget, setMonthlyBudget] = useState(settings.monthly_budget || '0')
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => settingsApi.bulkUpdate(data),
@@ -145,6 +146,7 @@ function StoreSideSettings({ settings }: { settings: Record<string, string> }) {
       auto_deduct_stock: String(autoDeductStock),
       invoice_prefix: invoicePrefix,
       default_tax: defaultTax,
+      monthly_budget: monthlyBudget,
     })
   }
 
@@ -203,6 +205,21 @@ function StoreSideSettings({ settings }: { settings: Record<string, string> }) {
             />
             <span className="text-sm text-gray-500">%</span>
           </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1.5">Monthly Expense Budget (PKR)</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={monthlyBudget}
+              onChange={e => setMonthlyBudget(e.target.value)}
+              className="input-field flex-1"
+              placeholder="0"
+              min="0"
+            />
+            <span className="text-sm text-gray-500">PKR</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Shown as a progress bar on the Dashboard</p>
         </div>
       </div>
 

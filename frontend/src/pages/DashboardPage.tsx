@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   Package, TrendingUp, ShoppingCart, DollarSign,
-  Receipt, BarChart3, AlertTriangle, MapPin, User2
+  Receipt, BarChart3, AlertTriangle, MapPin, User2, Wallet
 } from 'lucide-react'
-import { dashboardApi } from '../services/api'
+import { dashboardApi, settingsApi } from '../services/api'
 import { formatCurrency, formatShortDate } from '../utils/format'
 import StatCard from '../components/ui/StatCard'
 import Loader from '../components/ui/Loader'
@@ -32,6 +32,20 @@ export default function DashboardPage() {
     queryKey: ['low-stock'],
     queryFn: () => dashboardApi.lowStock(10).then(r => r.data),
   })
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.getAll().then(r => r.data),
+  })
+
+  const monthlyBudget = (() => {
+    const s = settingsData?.find((x: { key: string }) => x.key === 'monthly_budget')
+    return s ? parseFloat(s.value) : 0
+  })()
+
+  const monthlyExpenses = stats?.total_expenses || 0
+  const budgetPct = monthlyBudget > 0 ? Math.min((monthlyExpenses / monthlyBudget) * 100, 100) : 0
+  const budgetOver = monthlyBudget > 0 && monthlyExpenses > monthlyBudget
 
   if (isLoading) return <Loader />
 
@@ -125,6 +139,44 @@ export default function DashboardPage() {
           changeLabel="from last month"
         />
       </div>
+
+      {/* ── Monthly Budget Progress ── */}
+      {monthlyBudget > 0 && (
+        <div className={`card p-5 border ${budgetOver ? 'border-red-200 bg-red-50/30' : 'border-gray-100'}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${budgetOver ? 'bg-red-100' : 'bg-blue-50'}`}>
+                <Wallet className={`w-4 h-4 ${budgetOver ? 'text-red-600' : 'text-blue-600'}`} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Monthly Expense Budget</p>
+                <p className="text-xs text-gray-400">
+                  {formatCurrency(monthlyExpenses)} spent of {formatCurrency(monthlyBudget)}
+                </p>
+              </div>
+            </div>
+            <span className={`text-sm font-bold ${budgetOver ? 'text-red-600' : budgetPct >= 80 ? 'text-orange-500' : 'text-green-600'}`}>
+              {budgetPct.toFixed(0)}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              className={`h-2.5 rounded-full transition-all ${budgetOver ? 'bg-red-500' : budgetPct >= 80 ? 'bg-orange-400' : 'bg-green-500'}`}
+              style={{ width: `${budgetPct}%` }}
+            />
+          </div>
+          {budgetOver && (
+            <p className="text-xs text-red-600 font-medium mt-2">
+              Over budget by {formatCurrency(monthlyExpenses - monthlyBudget)}
+            </p>
+          )}
+          {!budgetOver && monthlyBudget > 0 && (
+            <p className="text-xs text-gray-400 mt-2">
+              {formatCurrency(monthlyBudget - monthlyExpenses)} remaining this month
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Recent Sales by Market ── */}
       {recentSales && recentSales.length > 0 && (

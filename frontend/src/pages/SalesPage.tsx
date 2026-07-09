@@ -24,7 +24,7 @@ export default function SalesPage() {
   const [isCredit, setIsCredit] = useState(false)
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [selectedProductId, setSelectedProductId] = useState('')
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState<number | ''>('')
   const [salePrice, setSalePrice] = useState(0)
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] = useState('Cash')
@@ -41,7 +41,7 @@ export default function SalesPage() {
 
   const { data: products } = useQuery({
     queryKey: ['products-all'],
-    queryFn: () => productsApi.all().then(r => r.data),
+    queryFn: () => productsApi.all({ include_zero_stock: true }).then(r => r.data),
   })
 
   const { data: allCustomers } = useQuery({
@@ -65,7 +65,7 @@ export default function SalesPage() {
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
       setCart([])
       setSelectedProductId('')
-      setQuantity(1)
+      setQuantity('')
       setSalePrice(0)
       setCustomerName('')
       setMarketName('')
@@ -95,10 +95,11 @@ export default function SalesPage() {
   }
 
   const addToCart = () => {
+    const qty = typeof quantity === 'number' ? quantity : parseInt(String(quantity)) || 0
     if (!selectedProduct) { toast.error('Please select a product'); return }
-    if (quantity < 1) { toast.error('Quantity must be at least 1'); return }
+    if (qty < 1) { toast.error('Quantity must be at least 1'); return }
     if (salePrice <= 0) { toast.error('Sale price must be greater than 0'); return }
-    if (quantity > selectedProduct.stock) {
+    if (qty > selectedProduct.stock) {
       toast.error(`Only ${selectedProduct.stock} units in stock for ${selectedProduct.name}`)
       return
     }
@@ -106,7 +107,7 @@ export default function SalesPage() {
     setCart(prev => {
       const existing = prev.find(i => i.product.id === selectedProduct.id)
       if (existing) {
-        const newQty = existing.quantity + quantity
+        const newQty = existing.quantity + qty
         if (newQty > selectedProduct.stock) {
           toast.error(`Cannot add more than ${selectedProduct.stock} units`)
           return prev
@@ -116,12 +117,12 @@ export default function SalesPage() {
           : i
         )
       }
-      return [...prev, { product: selectedProduct, quantity, sale_price: salePrice }]
+      return [...prev, { product: selectedProduct, quantity: qty, sale_price: salePrice }]
     })
 
     // Reset form
     setSelectedProductId('')
-    setQuantity(1)
+    setQuantity('')
     setSalePrice(0)
   }
 
@@ -325,7 +326,16 @@ export default function SalesPage() {
               <label className="block text-xs font-medium text-gray-600 mb-1">Registered Customer (optional)</label>
               <select
                 value={selectedCustomerId}
-                onChange={e => setSelectedCustomerId(e.target.value)}
+                onChange={e => {
+                  const id = e.target.value
+                  setSelectedCustomerId(id)
+                  if (id) {
+                    const c = allCustomers?.find((x: { id: number; name: string }) => x.id === parseInt(id))
+                    if (c) setCustomerName(c.name)
+                  } else {
+                    setCustomerName('')
+                  }
+                }}
                 className="input-field text-sm"
               >
                 <option value="">Select Registered Customer</option>
@@ -366,8 +376,8 @@ export default function SalesPage() {
                 >
                   <option value="">Select Product</option>
                   {products?.map((p: Product) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} — Stock: {p.stock} {p.unit}
+                    <option key={p.id} value={p.id} disabled={p.stock === 0}>
+                      {p.stock === 0 ? `[Out of Stock] ${p.name}` : `${p.name} — Stock: ${p.stock} ${p.unit}`}
                     </option>
                   ))}
                 </select>
@@ -388,8 +398,12 @@ export default function SalesPage() {
               <input
                 type="number"
                 value={quantity}
-                onChange={e => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={e => {
+                  const v = e.target.value
+                  setQuantity(v === '' ? '' : Math.max(1, parseInt(v) || 1))
+                }}
                 className="input-field text-sm"
+                placeholder="Enter quantity"
                 min="1"
                 max={selectedProduct?.stock || undefined}
               />
@@ -412,7 +426,7 @@ export default function SalesPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-gray-50 rounded-lg px-3 py-2">
                 <span className="text-gray-500 text-xs block">Total Amount (PKR)</span>
-                <span className="font-semibold text-sm">{(salePrice * quantity).toLocaleString()}</span>
+                <span className="font-semibold text-sm">{(salePrice * (typeof quantity === 'number' ? quantity : 0)).toLocaleString()}</span>
               </div>
               <div className="bg-gray-50 rounded-lg px-3 py-2">
                 <span className="text-gray-500 text-xs block">Payment Method</span>
