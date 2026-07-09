@@ -80,7 +80,7 @@ export const suppliersApi = {
 // Products
 export const productsApi = {
   list: (params?: Record<string, unknown>) => api.get('/products', { params }),
-  all: () => api.get('/products/all'),
+  all: (params?: Record<string, unknown>) => api.get('/products/all', { params }),
   stats: () => api.get('/products/stats'),
   get: (id: number) => api.get(`/products/${id}`),
   create: (data: unknown) => api.post('/products', data),
@@ -129,6 +129,7 @@ export const settingsApi = {
   getAll: () => api.get('/settings'),
   get: (key: string) => api.get(`/settings/${key}`),
   bulkUpdate: (settings: Record<string, unknown>) => api.put('/settings/bulk', { settings }),
+  systemInfo: () => api.get('/settings/system/info'),
 }
 
 // Backup
@@ -139,6 +140,25 @@ export const backupApi = {
     form.append('file', file)
     return api.post('/backup/import', form, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
+}
+
+// Customers
+export const customersApi = {
+  list: (params?: Record<string, unknown>) => api.get('/customers', { params }),
+  all: () => api.get('/customers/all'),
+  get: (id: number) => api.get(`/customers/${id}`),
+  create: (data: unknown) => api.post('/customers', data),
+  update: (id: number, data: unknown) => api.put(`/customers/${id}`, data),
+  delete: (id: number) => api.delete(`/customers/${id}`),
+  addPayment: (id: number, data: unknown) => api.post(`/customers/${id}/payments`, data),
+}
+
+// Purchases (Restock)
+export const purchasesApi = {
+  list: (params?: Record<string, unknown>) => api.get('/purchases', { params }),
+  get: (id: number) => api.get(`/purchases/${id}`),
+  create: (data: unknown) => api.post('/purchases', data),
+  delete: (id: number) => api.delete(`/purchases/${id}`),
 }
 
 // Users

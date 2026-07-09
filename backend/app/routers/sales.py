@@ -126,6 +126,8 @@ def create_sale(data: SaleCreate, db: Session = Depends(get_db), current_user: U
         profit=profit,
         payment_method=data.payment_method,
         notes=data.notes,
+        customer_id=data.customer_id,
+        is_credit=data.is_credit,
     )
     db.add(sale)
     db.flush()

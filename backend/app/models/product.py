@@ -34,3 +34,4 @@ class Product(Base):
     supplier = relationship("Supplier", back_populates="products")
     images = relationship("ProductImage", back_populates="product", cascade="all, delete-orphan")
     sale_items = relationship("SaleItem", back_populates="product")
+    purchase_items = relationship("PurchaseItem", back_populates="product")

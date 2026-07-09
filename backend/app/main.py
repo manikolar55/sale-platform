@@ -8,6 +8,10 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import engine, SessionLocal, Base
 from app.routers import auth, users, categories, suppliers, products, sales, expenses, reports, settings as settings_router, dashboard, backup
+from app.routers import customers as customers_router
+from app.routers import purchases as purchases_router
+from app.models import customer as _customer_models  # noqa: F401 — ensures tables are registered with Base.metadata
+from app.models import purchase as _purchase_models  # noqa: F401
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,6 +99,8 @@ app.include_router(reports.router)
 app.include_router(settings_router.router)
 app.include_router(dashboard.router)
 app.include_router(backup.router)
+app.include_router(customers_router.router)
+app.include_router(purchases_router.router)
 
 
 @app.get("/api/health")

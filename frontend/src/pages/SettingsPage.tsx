@@ -351,15 +351,25 @@ function UserManagementTab() {
   )
 }
 
-function SystemTab({ settings }: { settings: Record<string, string> }) {
+function SystemTab() {
+  const { data: info } = useQuery({
+    queryKey: ['system-info'],
+    queryFn: () => settingsApi.systemInfo().then(r => r.data),
+  })
+
+  const items = [
+    { label: 'Software Version', value: info?.software_version || 'v1.0.0', icon: '🖥️' },
+    { label: 'Today\'s Date', value: info?.last_updated || '—', icon: '📅' },
+    { label: 'Database Size', value: info?.database_size || '—', icon: '🗄️' },
+    { label: 'License Status', value: info?.license_status || 'Active', icon: '✅' },
+    { label: 'Total Products', value: info?.total_products ?? '—', icon: '📦' },
+    { label: 'Total Sales', value: info?.total_sales ?? '—', icon: '🧾' },
+    { label: 'Total Expenses', value: info?.total_expenses ?? '—', icon: '💸' },
+  ]
+
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {[
-        { label: 'Software Version', value: settings.software_version || 'v1.0.0', icon: '🖥️' },
-        { label: 'Last Updated', value: settings.last_updated || '20 May, 2024', icon: '📅' },
-        { label: 'Database Size', value: settings.database_size || '24.8 MB', icon: '🗄️' },
-        { label: 'License Status', value: settings.license_status || 'Active', icon: '✅' },
-      ].map(item => (
+      {items.map(item => (
         <div key={item.label} className="p-4 bg-gray-50 rounded-xl">
           <div className="text-2xl mb-2">{item.icon}</div>
           <div className="text-xs text-gray-500">{item.label}</div>
@@ -520,7 +530,7 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
-            {activeTab === 'System' && <SystemTab settings={settings} />}
+            {activeTab === 'System' && <SystemTab />}
           </>
         )}
       </div>
@@ -529,7 +539,7 @@ export default function SettingsPage() {
       {activeTab === 'General' && (
         <div className="border-t border-gray-100 px-6 py-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">About System</h3>
-          <SystemTab settings={settings} />
+          <SystemTab />
         </div>
       )}
     </div>

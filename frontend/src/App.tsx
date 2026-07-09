@@ -9,6 +9,8 @@ import SuppliersPage from './pages/SuppliersPage'
 import ExpensesPage from './pages/ExpensesPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
+import CustomersPage from './pages/CustomersPage'
+import PurchasesPage from './pages/PurchasesPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Read directly from localStorage — always in sync, no stale closure issues
@@ -36,6 +38,8 @@ export default function App() {
           <Route path="sales" element={<SalesPage />} />
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="purchases" element={<PurchasesPage />} />
           <Route path="expenses" element={<ExpensesPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<SettingsPage />} />

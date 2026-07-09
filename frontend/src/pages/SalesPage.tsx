@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Trash2, Eye, ChevronDown, ShoppingCart, CheckCircle, Info, MapPin, User2 } from 'lucide-react'
-import { salesApi, productsApi } from '../services/api'
+import { Search, Plus, Trash2, Eye, ChevronDown, ShoppingCart, CheckCircle, Info, MapPin, User2, Printer } from 'lucide-react'
+import { salesApi, productsApi, customersApi } from '../services/api'
 import type { Product, SaleListItem, CartItem } from '../types'
 import Pagination from '../components/ui/Pagination'
 import Modal from '../components/ui/Modal'
@@ -21,6 +21,8 @@ export default function SalesPage() {
   const [saleDate, setSaleDate] = useState(() => new Date().toISOString().split('T')[0])
   const [customerName, setCustomerName] = useState('')
   const [marketName, setMarketName] = useState('')
+  const [isCredit, setIsCredit] = useState(false)
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [selectedProductId, setSelectedProductId] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [salePrice, setSalePrice] = useState(0)
@@ -40,6 +42,11 @@ export default function SalesPage() {
   const { data: products } = useQuery({
     queryKey: ['products-all'],
     queryFn: () => productsApi.all().then(r => r.data),
+  })
+
+  const { data: allCustomers } = useQuery({
+    queryKey: ['customers-all'],
+    queryFn: () => customersApi.all().then(r => r.data),
   })
 
   const { data: saleDetail } = useQuery({
@@ -62,6 +69,8 @@ export default function SalesPage() {
       setSalePrice(0)
       setCustomerName('')
       setMarketName('')
+      setIsCredit(false)
+      setSelectedCustomerId('')
     },
     onError: (e: any) => toast.error(e.response?.data?.detail || 'Sale failed'),
   })
@@ -122,6 +131,88 @@ export default function SalesPage() {
 
   const cartTotal = cart.reduce((sum, i) => sum + i.sale_price * i.quantity, 0)
 
+  const printInvoice = async (sale: any) => {
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc = new jsPDF('p', 'mm', 'a5')
+      const W = 148
+
+      // Header
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Gohar Butt', W / 2, 16, { align: 'center' })
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(100)
+      doc.text('Main Market, Gujranwala  |  0334-6407243', W / 2, 22, { align: 'center' })
+      doc.setTextColor(0)
+
+      // Divider
+      doc.setDrawColor(200)
+      doc.line(10, 26, W - 10, 26)
+
+      // Invoice label
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('INVOICE', W / 2, 33, { align: 'center' })
+
+      // Meta info
+      doc.setFontSize(8.5)
+      doc.setFont('helvetica', 'normal')
+      let y = 41
+      doc.text(`Invoice #: ${sale.invoice_number}`, 10, y)
+      doc.text(`Date: ${new Date(sale.sale_date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}`, W - 10, y, { align: 'right' })
+      y += 6
+      doc.text(`Payment: ${sale.payment_method}`, 10, y)
+      if (sale.is_credit) {
+        doc.setTextColor(200, 50, 50)
+        doc.text('CREDIT SALE', W - 10, y, { align: 'right' })
+        doc.setTextColor(0)
+      }
+      if (sale.customer_name || sale.market_name) {
+        y += 6
+        if (sale.customer_name) doc.text(`Customer: ${sale.customer_name}`, 10, y)
+        if (sale.market_name) doc.text(`Market: ${sale.market_name}`, W - 10, y, { align: 'right' })
+      }
+
+      // Items table
+      const rows = (sale.items || []).map((item: any) => [
+        item.product?.name || '',
+        String(item.quantity),
+        `PKR ${Number(item.sale_price).toLocaleString()}`,
+        `PKR ${Number(item.total).toLocaleString()}`,
+      ])
+
+      autoTable(doc, {
+        startY: y + 5,
+        head: [['Product', 'Qty', 'Unit Price', 'Total']],
+        body: rows,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [7, 28, 60], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 'auto' }, 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        margin: { left: 10, right: 10 },
+      })
+
+      const finalY = (doc as any).lastAutoTable.finalY + 5
+
+      // Totals
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Total:  PKR ${Number(sale.total).toLocaleString()}`, W - 10, finalY, { align: 'right' })
+
+      // Footer
+      doc.setFontSize(7.5)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(150)
+      doc.text('Thank you for your business!', W / 2, finalY + 12, { align: 'center' })
+
+      doc.save(`${sale.invoice_number}.pdf`)
+    } catch {
+      toast.error('Could not generate PDF')
+    }
+  }
+
   const completeSale = () => {
     if (cart.length === 0) { toast.error('Cart is empty'); return }
     createMutation.mutate({
@@ -135,6 +226,8 @@ export default function SalesPage() {
       payment_method: paymentMethod,
       discount: 0,
       tax: 0,
+      customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : undefined,
+      is_credit: isCredit,
     })
   }
 
@@ -186,6 +279,41 @@ export default function SalesPage() {
                   placeholder="e.g. Ahmed"
                 />
               </div>
+            </div>
+
+            {/* Registered Customer */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Registered Customer (optional)</label>
+              <select
+                value={selectedCustomerId}
+                onChange={e => setSelectedCustomerId(e.target.value)}
+                className="input-field text-sm"
+              >
+                <option value="">Select Registered Customer</option>
+                {allCustomers?.map((c: { id: number; name: string; phone: string | null }) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.phone ? ` — ${c.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Credit Sale toggle */}
+            <div className="flex items-center gap-3 py-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <div
+                  onClick={() => setIsCredit(v => !v)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${isCredit ? 'bg-blue-600' : 'bg-gray-200'}`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isCredit ? 'translate-x-5' : ''}`}
+                  />
+                </div>
+                <span className="text-xs font-medium text-gray-700">Credit Sale</span>
+              </label>
+              {isCredit && (
+                <span className="text-xs text-red-600 font-medium">Will be recorded as outstanding balance</span>
+              )}
             </div>
 
             {/* Product dropdown */}
@@ -517,6 +645,14 @@ export default function SalesPage() {
                 </tfoot>
               </table>
             </div>
+
+            <button
+              onClick={() => printInvoice(saleDetail)}
+              className="btn-primary w-full text-sm mt-2"
+            >
+              <Printer className="w-4 h-4" />
+              Print / Download Invoice
+            </button>
           </div>
         ) : (
           <div className="flex items-center justify-center py-8">

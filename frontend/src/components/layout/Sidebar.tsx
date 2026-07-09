@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, ShoppingCart, Tag, Truck,
-  Receipt, BarChart2, Settings, LogOut, Store, X
+  Receipt, BarChart2, Settings, LogOut, Store, X, Users, PackagePlus
 } from 'lucide-react'
 import { authStore } from '../../store/authStore'
 import toast from 'react-hot-toast'
@@ -10,6 +10,8 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/products', icon: Package, label: 'Products' },
   { to: '/sales', icon: ShoppingCart, label: 'Sales' },
+  { to: '/purchases', icon: PackagePlus, label: 'Restock' },
+  { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/categories', icon: Tag, label: 'Categories' },
   { to: '/suppliers', icon: Truck, label: 'Suppliers' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },

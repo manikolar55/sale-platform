@@ -49,9 +49,15 @@ def list_products(
 
 
 @router.get("/all", response_model=list)
-def all_products(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    products = db.query(Product).filter(Product.is_active == True, Product.stock > 0).all()
-    return [ProductResponse.model_validate(p) for p in products]
+def all_products(
+    include_zero_stock: bool = False,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    query = db.query(Product).filter(Product.is_active == True)
+    if not include_zero_stock:
+        query = query.filter(Product.stock > 0)
+    return [ProductResponse.model_validate(p) for p in query.all()]
 
 
 @router.get("/stats")

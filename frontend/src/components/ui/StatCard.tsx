@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { cn } from '../../utils/format'
 
 interface StatCardProps {
@@ -34,10 +35,13 @@ export default function StatCard({
               <span>{change} {changeLabel}</span>
             </div>
           )}
-          {linkLabel && (
-            <a href={link} className="text-xs text-blue-600 hover:underline mt-2 inline-block">
+          {linkLabel && link && (
+            <Link to={link} className="text-xs text-blue-600 hover:underline mt-2 inline-block">
               {linkLabel} →
-            </a>
+            </Link>
+          )}
+          {linkLabel && !link && (
+            <span className="text-xs text-gray-400 mt-2 inline-block">{linkLabel}</span>
           )}
         </div>
         <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0', iconBg)}>

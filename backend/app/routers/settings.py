@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List
+from datetime import datetime, timezone
 from app.database import get_db
 from app.models.setting import Setting
 from app.schemas.setting import SettingResponse, SettingsBulkUpdate
@@ -67,6 +69,29 @@ def bulk_update_settings(data: SettingsBulkUpdate, db: Session = Depends(get_db)
         updated.append(setting)
     db.commit()
     return [SettingResponse.model_validate(s) for s in updated]
+
+
+@router.get("/system/info")
+def system_info(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    try:
+        result = db.execute(text("SELECT pg_size_pretty(pg_database_size(current_database()))")).scalar()
+        db_size = result or "N/A"
+    except Exception:
+        db_size = "N/A"
+
+    from app.models.sale import Sale
+    from app.models.product import Product
+    from app.models.expense import Expense
+
+    return {
+        "software_version": "v1.0.0",
+        "last_updated": datetime.now(timezone.utc).strftime("%d %b %Y"),
+        "database_size": db_size,
+        "license_status": "Active",
+        "total_products": db.query(Product).count(),
+        "total_sales": db.query(Sale).count(),
+        "total_expenses": db.query(Expense).count(),
+    }
 
 
 @router.put("/{key}", response_model=SettingResponse)

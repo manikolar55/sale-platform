@@ -18,6 +18,8 @@ class SaleCreate(BaseModel):
     discount: Decimal = Decimal("0")
     tax: Decimal = Decimal("0")
     notes: Optional[str] = None
+    customer_id: Optional[int] = None
+    is_credit: bool = False
 
 
 class ProductMinimal(BaseModel):

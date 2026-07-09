@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
+
 class SaleItem(Base):
     __tablename__ = "sale_items"
     id = Column(Integer, primary_key=True, index=True)
@@ -32,7 +33,10 @@ class Sale(Base):
     market_name = Column(String(200), nullable=True)
     payment_method = Column(String(50), default="Cash")
     notes = Column(Text, nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    is_credit = Column(Boolean, default=False)
     sale_date = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     user = relationship("User", back_populates="sales")
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
+    customer = relationship("Customer", back_populates="sales")

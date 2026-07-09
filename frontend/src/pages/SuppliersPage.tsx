@@ -136,8 +136,8 @@ export default function SuppliersPage() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard title="Total Suppliers" value={String(stats?.total || 0)} icon={<Users className="w-5 h-5 text-blue-600" />} iconBg="bg-blue-50" linkLabel="View all suppliers" />
         <StatCard title="Active Suppliers" value={String(stats?.active || 0)} icon={<Truck className="w-5 h-5 text-green-600" />} iconBg="bg-green-50" changeLabel={`${stats?.total ? Math.round(stats.active / stats.total * 100) : 0}% of total suppliers`} />
-        <StatCard title="Total Purchases (This Month)" value={formatCurrency(0)} icon={<ShoppingCart className="w-5 h-5 text-purple-600" />} iconBg="bg-purple-50" linkLabel="View purchases →" />
-        <StatCard title="Total Payables" value={formatCurrency(0)} icon={<DollarSign className="w-5 h-5 text-orange-600" />} iconBg="bg-orange-50" linkLabel="View payables →" />
+        <StatCard title="Total Purchases (This Month)" value={formatCurrency(0)} icon={<ShoppingCart className="w-5 h-5 text-purple-600" />} iconBg="bg-purple-50" linkLabel="View purchases" link="/purchases" />
+        <StatCard title="Total Payables" value={formatCurrency(0)} icon={<DollarSign className="w-5 h-5 text-orange-600" />} iconBg="bg-orange-50" linkLabel="View purchases" link="/purchases" />
       </div>
 
       <div className="card">
