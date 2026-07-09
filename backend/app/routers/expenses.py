@@ -60,9 +60,9 @@ def list_expenses(
     if payment_method:
         query = query.filter(Expense.payment_method == payment_method)
     if date_from:
-        query = query.filter(Expense.expense_date >= datetime.fromisoformat(date_from))
+        query = query.filter(Expense.expense_date >= datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=timezone.utc))
     if date_to:
-        query = query.filter(Expense.expense_date <= datetime.fromisoformat(date_to))
+        query = query.filter(Expense.expense_date <= datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc))
     total = query.count()
     pages = math.ceil(total / per_page) if total > 0 else 1
     items = query.offset((page - 1) * per_page).limit(per_page).all()

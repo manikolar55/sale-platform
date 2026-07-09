@@ -22,6 +22,28 @@ interface ExpenseFormProps {
 }
 
 function ExpenseForm({ initial, categories, onSubmit, loading, onClose }: ExpenseFormProps) {
+  const qc = useQueryClient()
+  const [newCatName, setNewCatName] = useState('')
+  const [showNewCat, setShowNewCat] = useState(false)
+  const [savingCat, setSavingCat] = useState(false)
+
+  const addCategory = async () => {
+    if (!newCatName.trim()) return
+    setSavingCat(true)
+    try {
+      const { expensesApi } = await import('../services/api')
+      await expensesApi.createCategory({ name: newCatName.trim() })
+      qc.invalidateQueries({ queryKey: ['expense-categories'] })
+      setNewCatName('')
+      setShowNewCat(false)
+      toast.success('Category added')
+    } catch {
+      toast.error('Failed to add category')
+    } finally {
+      setSavingCat(false)
+    }
+  }
+
   const [form, setForm] = useState({
     category_id: initial?.category_id?.toString() || '',
     description: initial?.description || '',
@@ -59,11 +81,41 @@ function ExpenseForm({ initial, categories, onSubmit, loading, onClose }: Expens
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
-        <select value={form.category_id} onChange={set('category_id')} className="input-field">
-          <option value="">Select Category</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-sm font-medium text-gray-700">Category</label>
+          <button
+            type="button"
+            onClick={() => setShowNewCat(v => !v)}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            {showNewCat ? 'Cancel' : '+ Add Category'}
+          </button>
+        </div>
+        {showNewCat ? (
+          <div className="flex gap-2">
+            <input
+              value={newCatName}
+              onChange={e => setNewCatName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+              className="input-field flex-1 text-sm"
+              placeholder="Category name e.g. Petrol"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={addCategory}
+              disabled={savingCat || !newCatName.trim()}
+              className="btn-primary text-sm px-3 disabled:opacity-40"
+            >
+              {savingCat ? '...' : 'Add'}
+            </button>
+          </div>
+        ) : (
+          <select value={form.category_id} onChange={set('category_id')} className="input-field">
+            <option value="">Select Category</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Description *</label>

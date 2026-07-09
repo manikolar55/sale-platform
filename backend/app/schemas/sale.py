@@ -41,6 +41,13 @@ class SaleItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CustomerBalanceInfo(BaseModel):
+    name: str
+    phone: Optional[str] = None
+    prev_balance: Decimal = Decimal("0")
+    current_balance: Decimal = Decimal("0")
+
+
 class SaleResponse(BaseModel):
     id: int
     invoice_number: str
@@ -53,8 +60,11 @@ class SaleResponse(BaseModel):
     profit: Decimal
     payment_method: str
     notes: Optional[str] = None
+    is_credit: bool = False
+    customer_id: Optional[int] = None
     sale_date: datetime
     items: List[SaleItemResponse] = []
+    customer_info: Optional[CustomerBalanceInfo] = None
 
     model_config = {"from_attributes": True}
 

@@ -17,6 +17,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def seed_expense_categories(db):
+    from app.models.expense import ExpenseCategory
+    if db.query(ExpenseCategory).count() > 0:
+        return
+    defaults = [
+        ExpenseCategory(name="Petrol / Fuel", color="#EF4444"),
+        ExpenseCategory(name="Shop Rent", color="#8B5CF6"),
+        ExpenseCategory(name="Utilities", color="#F59E0B"),
+        ExpenseCategory(name="Salaries", color="#3B82F6"),
+        ExpenseCategory(name="Purchase / Stock", color="#10B981"),
+        ExpenseCategory(name="Maintenance", color="#EC4899"),
+        ExpenseCategory(name="Other", color="#6B7280"),
+    ]
+    db.add_all(defaults)
+    db.commit()
+
+
 def seed_data(db):
     from app.models.user import Role, User
     from app.models.setting import Setting
@@ -65,6 +82,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_data(db)
+        seed_expense_categories(db)
     finally:
         db.close()
     yield

@@ -196,16 +196,55 @@ export default function SalesPage() {
 
       const finalY = (doc as any).lastAutoTable.finalY + 5
 
-      // Totals
+      // Sale total
       doc.setFontSize(9)
       doc.setFont('helvetica', 'bold')
       doc.text(`Total:  PKR ${Number(sale.total).toLocaleString()}`, W - 10, finalY, { align: 'right' })
+
+      // Customer balance section
+      let footerY = finalY + 8
+      if (sale.customer_info) {
+        const prev = Number(sale.customer_info.prev_balance)
+        const saleAmt = Number(sale.total)
+        const newBal = sale.is_credit ? prev + saleAmt : prev - saleAmt
+        const fmtBal = (b: number) => b > 0 ? `PKR ${b.toLocaleString()} Due` : b < 0 ? `PKR ${Math.abs(b).toLocaleString()} Advance` : 'PKR 0 (Clear)'
+
+        doc.setDrawColor(180)
+        doc.line(10, footerY, W - 10, footerY)
+        footerY += 5
+
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Account Statement', 10, footerY)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        if (sale.customer_info.phone) doc.text(sale.customer_info.phone, W - 10, footerY, { align: 'right' })
+        footerY += 6
+
+        doc.setFontSize(8.5)
+        doc.text('Previous Balance:', 10, footerY)
+        doc.setTextColor(prev > 0 ? 180 : 30, 30, 30)
+        doc.text(fmtBal(prev), W - 10, footerY, { align: 'right' })
+        doc.setTextColor(0)
+        footerY += 5
+
+        doc.text(`This Sale (${sale.is_credit ? 'Credit +' : 'Cash −'}):`, 10, footerY)
+        doc.text(`PKR ${saleAmt.toLocaleString()}`, W - 10, footerY, { align: 'right' })
+        footerY += 5
+
+        doc.setFont('helvetica', 'bold')
+        doc.text('New Balance:', 10, footerY)
+        doc.setTextColor(newBal > 0 ? 180 : 30, 30, 30)
+        doc.text(fmtBal(newBal), W - 10, footerY, { align: 'right' })
+        doc.setTextColor(0)
+        footerY += 8
+      }
 
       // Footer
       doc.setFontSize(7.5)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(150)
-      doc.text('Thank you for your business!', W / 2, finalY + 12, { align: 'center' })
+      doc.text('Thank you for your business!', W / 2, footerY, { align: 'center' })
 
       doc.save(`${sale.invoice_number}.pdf`)
     } catch {
@@ -636,15 +675,50 @@ export default function SalesPage() {
                       PKR {Number(saleDetail.total).toLocaleString()}
                     </td>
                   </tr>
-                  <tr>
-                    <td colSpan={3} className="px-3 py-2 text-right text-sm text-gray-500">Profit</td>
-                    <td className="px-3 py-2 text-right font-semibold text-green-600">
-                      PKR {Number(saleDetail.profit).toLocaleString()}
-                    </td>
-                  </tr>
                 </tfoot>
               </table>
             </div>
+
+            {/* Customer Balance Summary */}
+            {saleDetail.customer_info && (() => {
+              const prev = Number(saleDetail.customer_info.prev_balance)
+              const saleAmt = Number(saleDetail.total)
+              const newBal = saleDetail.is_credit ? prev + saleAmt : prev - saleAmt
+              const fmtBal = (b: number) => b > 0
+                ? { text: `PKR ${b.toLocaleString()} Due`, cls: 'text-red-600' }
+                : b < 0
+                ? { text: `PKR ${Math.abs(b).toLocaleString()} Advance`, cls: 'text-green-600' }
+                : { text: 'PKR 0 (Clear)', cls: 'text-green-600' }
+              const prevFmt = fmtBal(prev)
+              const newFmt = fmtBal(newBal)
+              return (
+                <div className="border border-blue-100 rounded-lg overflow-hidden mt-1">
+                  <div className="bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                    Customer: {saleDetail.customer_info.name}
+                    {saleDetail.customer_info.phone && <span className="font-normal ml-2 text-blue-500">{saleDetail.customer_info.phone}</span>}
+                  </div>
+                  <div className="divide-y divide-blue-50">
+                    <div className="flex justify-between px-3 py-2 text-sm">
+                      <span className="text-gray-500">Previous Balance</span>
+                      <span className={`font-medium ${prevFmt.cls}`}>{prevFmt.text}</span>
+                    </div>
+                    <div className="flex justify-between px-3 py-2 text-sm">
+                      <span className="text-gray-500">
+                        This Sale
+                        <span className={`ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded ${saleDetail.is_credit ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-700'}`}>
+                          {saleDetail.is_credit ? 'Credit +' : 'Cash −'}
+                        </span>
+                      </span>
+                      <span className="font-medium text-gray-800">PKR {saleAmt.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between px-3 py-2 text-sm bg-gray-50">
+                      <span className="font-semibold text-gray-700">New Balance</span>
+                      <span className={`font-bold text-base ${newFmt.cls}`}>{newFmt.text}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             <button
               onClick={() => printInvoice(saleDetail)}

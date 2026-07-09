@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.sale import Sale, SaleItem
 from app.models.product import Product
 from app.models.setting import Setting
-from app.schemas.sale import SaleCreate, SaleResponse, SaleListResponse
+from app.schemas.sale import SaleCreate, SaleResponse, SaleListResponse, CustomerBalanceInfo
 from app.schemas.common import PaginatedResponse, MessageResponse
 from app.utils.deps import get_current_user
 from app.models.user import User
@@ -44,9 +44,9 @@ def list_sales(
     if payment_method:
         query = query.filter(Sale.payment_method == payment_method)
     if date_from:
-        query = query.filter(Sale.sale_date >= datetime.fromisoformat(date_from))
+        query = query.filter(Sale.sale_date >= datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=timezone.utc))
     if date_to:
-        query = query.filter(Sale.sale_date <= datetime.fromisoformat(date_to))
+        query = query.filter(Sale.sale_date <= datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc))
     total = query.count()
     pages = math.ceil(total / per_page) if total > 0 else 1
     items = query.offset((page - 1) * per_page).limit(per_page).all()
@@ -141,10 +141,34 @@ def create_sale(data: SaleCreate, db: Session = Depends(get_db), current_user: U
 
 @router.get("/{sale_id}", response_model=SaleResponse)
 def get_sale(sale_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from app.models.customer import Customer, CustomerPayment
     sale = db.query(Sale).filter(Sale.id == sale_id).first()
     if not sale:
         raise HTTPException(404, "Sale not found")
-    return sale
+
+    response = SaleResponse.model_validate(sale)
+
+    if sale.customer_id:
+        customer = db.query(Customer).filter(Customer.id == sale.customer_id).first()
+        if customer:
+            total_credit = db.query(func.sum(Sale.total)).filter(
+                Sale.customer_id == sale.customer_id,
+                Sale.is_credit == True,
+            ).scalar() or 0
+            total_paid = db.query(func.sum(CustomerPayment.amount)).filter(
+                CustomerPayment.customer_id == sale.customer_id,
+            ).scalar() or 0
+            current_balance = float(total_credit) - float(total_paid)
+            # prev = balance before this sale (undo this sale's effect)
+            prev_balance = current_balance - float(sale.total) if sale.is_credit else current_balance + float(sale.total)
+            response.customer_info = CustomerBalanceInfo(
+                name=customer.name,
+                phone=customer.phone,
+                prev_balance=round(prev_balance, 2),
+                current_balance=round(current_balance, 2),
+            )
+
+    return response
 
 
 @router.delete("/{sale_id}", response_model=MessageResponse)

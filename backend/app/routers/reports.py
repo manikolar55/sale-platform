@@ -21,8 +21,8 @@ def report_overview(
     _: User = Depends(get_current_user),
 ):
     now = datetime.now(timezone.utc)
-    df = datetime.fromisoformat(date_from) if date_from else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    dt = datetime.fromisoformat(date_to) if date_to else now
+    df = datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=timezone.utc) if date_from else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    dt = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc) if date_to else now
 
     sales_query = db.query(Sale).filter(Sale.sale_date >= df, Sale.sale_date <= dt)
     total_sales = sales_query.with_entities(func.sum(Sale.total)).scalar() or 0
@@ -55,8 +55,8 @@ def sales_chart(
     _: User = Depends(get_current_user),
 ):
     now = datetime.now(timezone.utc)
-    df = datetime.fromisoformat(date_from) if date_from else now - timedelta(days=30)
-    dt = datetime.fromisoformat(date_to) if date_to else now
+    df = datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=timezone.utc) if date_from else now - timedelta(days=30)
+    dt = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc) if date_to else now
 
     sales = db.query(Sale).filter(Sale.sale_date >= df, Sale.sale_date <= dt).all()
 
@@ -86,8 +86,8 @@ def top_products(
     _: User = Depends(get_current_user),
 ):
     now = datetime.now(timezone.utc)
-    df = datetime.fromisoformat(date_from) if date_from else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    dt = datetime.fromisoformat(date_to) if date_to else now
+    df = datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=timezone.utc) if date_from else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    dt = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc) if date_to else now
 
     results = db.query(
         Product.name,
@@ -113,8 +113,8 @@ def expenses_by_category(
 ):
     from app.models.expense import ExpenseCategory
     now = datetime.now(timezone.utc)
-    df = datetime.fromisoformat(date_from) if date_from else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    dt = datetime.fromisoformat(date_to) if date_to else now
+    df = datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=timezone.utc) if date_from else now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    dt = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc) if date_to else now
 
     results = db.query(
         ExpenseCategory.name,
