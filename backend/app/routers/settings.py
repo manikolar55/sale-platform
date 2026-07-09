@@ -10,10 +10,10 @@ from app.models.user import User
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
 DEFAULT_SETTINGS = {
-    "store_name": "Al Noor General Store",
-    "store_address": "Main Market, Lahore, Punjab, Pakistan",
-    "store_phone": "0300-1234567",
-    "store_email": "alnoorstore@gmail.com",
+    "store_name": "Gohar Butt",
+    "store_address": "Main Market, Gujranwala, Punjab, Pakistan",
+    "store_phone": "",
+    "store_email": "",
     "currency": "PKR - Pakistani Rupee",
     "time_format": "12 Hour (AM/PM)",
     "date_format": "24 May, 2024",

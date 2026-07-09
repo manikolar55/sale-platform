@@ -88,9 +88,9 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               <Store className="w-4 h-4 text-white" />
             </div>
             <div className="min-w-0">
-              <div className="text-white text-xs font-semibold truncate">Al Noor General Store</div>
-              <div className="text-white/50 text-xs truncate">Main Market, Lahore</div>
-              <div className="text-white/50 text-xs">0300-1234567</div>
+              <div className="text-white text-xs font-semibold truncate">Gohar Butt</div>
+              <div className="text-white/50 text-xs truncate">Main Market, Gujranwala</div>
+              <div className="text-white/50 text-xs">0334-6407243</div>
             </div>
           </div>
         </div>
