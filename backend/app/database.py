@@ -3,13 +3,17 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
+is_sqlite = "sqlite" in settings.DATABASE_URL
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
+    connect_args={"check_same_thread": False} if is_sqlite else {"sslmode": "require"},
+    pool_pre_ping=True,
+    pool_recycle=300,
     echo=settings.DEBUG,
 )
 
-if "sqlite" in settings.DATABASE_URL:
+if is_sqlite:
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
