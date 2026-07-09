@@ -1,0 +1,62 @@
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+env/
+venv/
+.venv/
+ENV/
+pip-log.txt
+
+# ── Environment / Secrets ────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Database ─────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Uploads / Media ──────────────────────────────────
+backend/uploads/
+
+# ── Logs ─────────────────────────────────────────────
+*.log
+*.txt
+uvicorn_out.txt
+uvicorn_err.txt
+
+# ── Node / Frontend ──────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+.npm
+.eslintcache
+
+# ── Vite ─────────────────────────────────────────────
+frontend/.vite/
+
+# ── OS ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
