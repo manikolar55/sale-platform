@@ -35,6 +35,7 @@ class Sale(Base):
     notes = Column(Text, nullable=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     is_credit = Column(Boolean, default=False)
+    amount_paid = Column(Numeric(12, 2), nullable=False, default=0)
     sale_date = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     user = relationship("User", back_populates="sales")

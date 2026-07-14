@@ -1,42 +1,45 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Trash2, Eye, ChevronDown, ShoppingCart, CheckCircle, Info, MapPin, User2, Printer } from 'lucide-react'
+import { Search, Plus, Trash2, Eye, Printer, CheckCircle } from 'lucide-react'
 import { salesApi, productsApi, customersApi } from '../services/api'
-import type { Product, SaleListItem, CartItem } from '../types'
+import type { Product } from '../types'
 import Pagination from '../components/ui/Pagination'
 import Modal from '../components/ui/Modal'
 import EmptyState from '../components/ui/EmptyState'
 import { TableLoader } from '../components/ui/Loader'
-import { formatCurrency, formatShortDate } from '../utils/format'
+import { formatCurrency } from '../utils/format'
 import toast from 'react-hot-toast'
+
+interface SaleRow {
+  key: number
+  product_id: string
+  quantity: number | ''
+  unit_price: number
+  total: number
+}
+
+function formatDateTime(dateStr: string) {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-PK', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
 
 export default function SalesPage() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [paymentFilter, setPaymentFilter] = useState('')
   const [viewingSale, setViewingSale] = useState<any>(null)
 
   // New Sale form state
-  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [customerName, setCustomerName] = useState('')
-  const [marketName, setMarketName] = useState('')
-  const [isCredit, setIsCredit] = useState(false)
+  const [rows, setRows] = useState<SaleRow[]>([{ key: Date.now(), product_id: '', quantity: 1, unit_price: 0, total: 0 }])
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
-  const [selectedProductId, setSelectedProductId] = useState('')
-  const [quantity, setQuantity] = useState<number | ''>('')
-  const [salePrice, setSalePrice] = useState(0)
-  const [cart, setCart] = useState<CartItem[]>([])
-  const [paymentMethod, setPaymentMethod] = useState('Cash')
+  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [amountPaid, setAmountPaid] = useState<number | ''>('')
 
   // Queries
   const { data: salesData, isLoading } = useQuery({
-    queryKey: ['sales', page, search, paymentFilter],
-    queryFn: () => salesApi.list({
-      page, per_page: 8,
-      search: search || undefined,
-      payment_method: paymentFilter || undefined,
-    }).then(r => r.data),
+    queryKey: ['sales', page, search],
+    queryFn: () => salesApi.list({ page, per_page: 8, search: search || undefined }).then(r => r.data),
   })
 
   const { data: products } = useQuery({
@@ -58,79 +61,83 @@ export default function SalesPage() {
   const createMutation = useMutation({
     mutationFn: (data: any) => salesApi.create(data),
     onSuccess: () => {
-      toast.success('Sale completed successfully!')
+      toast.success('Sale completed!')
       qc.invalidateQueries({ queryKey: ['sales'] })
       qc.invalidateQueries({ queryKey: ['products-all'] })
       qc.invalidateQueries({ queryKey: ['products'] })
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
-      setCart([])
-      setSelectedProductId('')
-      setQuantity('')
-      setSalePrice(0)
-      setCustomerName('')
-      setMarketName('')
-      setIsCredit(false)
+      setRows([{ key: Date.now(), product_id: '', quantity: 1, unit_price: 0, total: 0 }])
       setSelectedCustomerId('')
+      setAmountPaid('')
     },
     onError: (e: any) => toast.error(e.response?.data?.detail || 'Sale failed'),
   })
 
-  // Derive the selected product object from the dropdown value
-  const selectedProduct: Product | null =
-    products?.find((p: Product) => p.id === parseInt(selectedProductId)) ?? null
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => salesApi.delete(id),
+    onSuccess: () => {
+      toast.success('Sale deleted')
+      qc.invalidateQueries({ queryKey: ['sales'] })
+      qc.invalidateQueries({ queryKey: ['products-all'] })
+    },
+    onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed'),
+  })
 
-  const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value
-    setSelectedProductId(id)
-    if (id) {
-      const prod = products?.find((p: Product) => p.id === parseInt(id))
-      if (prod) {
-        setSalePrice(Number(prod.sale_price))
-        setQuantity(1)
-      }
-    } else {
-      setSalePrice(0)
-      setQuantity(1)
-    }
+  // Row management
+  const addRow = () => setRows(prev => [...prev, { key: Date.now(), product_id: '', quantity: 1, unit_price: 0, total: 0 }])
+
+  const removeRow = (key: number) => {
+    if (rows.length === 1) return
+    setRows(prev => prev.filter(r => r.key !== key))
   }
 
-  const addToCart = () => {
-    const qty = typeof quantity === 'number' ? quantity : parseInt(String(quantity)) || 0
-    if (!selectedProduct) { toast.error('Please select a product'); return }
-    if (qty < 1) { toast.error('Quantity must be at least 1'); return }
-    if (salePrice <= 0) { toast.error('Sale price must be greater than 0'); return }
-    if (qty > selectedProduct.stock) {
-      toast.error(`Only ${selectedProduct.stock} units in stock for ${selectedProduct.name}`)
-      return
-    }
-
-    setCart(prev => {
-      const existing = prev.find(i => i.product.id === selectedProduct.id)
-      if (existing) {
-        const newQty = existing.quantity + qty
-        if (newQty > selectedProduct.stock) {
-          toast.error(`Cannot add more than ${selectedProduct.stock} units`)
-          return prev
+  const updateRow = (key: number, field: string, value: any) => {
+    setRows(prev => prev.map(r => {
+      if (r.key !== key) return r
+      const updated = { ...r, [field]: value }
+      if (field === 'product_id') {
+        const prod = products?.find((p: Product) => p.id === parseInt(value))
+        if (prod) {
+          updated.unit_price = Number(prod.sale_price)
+          updated.total = updated.unit_price * (typeof updated.quantity === 'number' ? updated.quantity : 0)
+        } else {
+          updated.unit_price = 0
+          updated.total = 0
         }
-        return prev.map(i => i.product.id === selectedProduct.id
-          ? { ...i, quantity: newQty, sale_price: salePrice }
-          : i
-        )
       }
-      return [...prev, { product: selectedProduct, quantity: qty, sale_price: salePrice }]
+      if (field === 'quantity' || field === 'unit_price') {
+        const qty = typeof updated.quantity === 'number' ? updated.quantity : 0
+        updated.total = updated.unit_price * qty
+      }
+      return updated
+    }))
+  }
+
+  // Derived totals
+  const totalBill = rows.reduce((sum, r) => sum + r.total, 0)
+  const totalItems = rows.reduce((sum, r) => sum + (typeof r.quantity === 'number' ? r.quantity : 0), 0)
+  const paid = typeof amountPaid === 'number' ? amountPaid : 0
+  const remaining = totalBill - paid
+
+  const completeSale = () => {
+    const validRows = rows.filter(r => r.product_id && typeof r.quantity === 'number' && r.quantity > 0)
+    if (validRows.length === 0) { toast.error('Add at least one product with quantity'); return }
+    const customer = allCustomers?.find((c: any) => c.id === parseInt(selectedCustomerId))
+    createMutation.mutate({
+      items: validRows.map(r => ({
+        product_id: parseInt(r.product_id),
+        quantity: r.quantity as number,
+        sale_price: r.unit_price,
+      })),
+      customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : undefined,
+      customer_name: customer?.name || undefined,
+      amount_paid: paid,
+      payment_method: paid >= totalBill ? 'Cash' : 'Credit',
+      is_credit: paid < totalBill,
+      discount: 0,
+      tax: 0,
     })
-
-    // Reset form
-    setSelectedProductId('')
-    setQuantity('')
-    setSalePrice(0)
   }
-
-  const removeFromCart = (productId: number) => {
-    setCart(prev => prev.filter(i => i.product.id !== productId))
-  }
-
-  const cartTotal = cart.reduce((sum, i) => sum + i.sale_price * i.quantity, 0)
 
   const printInvoice = async (sale: any) => {
     try {
@@ -139,46 +146,22 @@ export default function SalesPage() {
       const doc = new jsPDF('p', 'mm', 'a5')
       const W = 148
 
-      // Header
-      doc.setFontSize(18)
-      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(18); doc.setFont('helvetica', 'bold')
       doc.text('Gohar Butt', W / 2, 16, { align: 'center' })
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(100)
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100)
       doc.text('Main Market, Gujranwala  |  0334-6407243', W / 2, 22, { align: 'center' })
-      doc.setTextColor(0)
-
-      // Divider
-      doc.setDrawColor(200)
-      doc.line(10, 26, W - 10, 26)
-
-      // Invoice label
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0); doc.setDrawColor(200); doc.line(10, 26, W - 10, 26)
+      doc.setFontSize(11); doc.setFont('helvetica', 'bold')
       doc.text('INVOICE', W / 2, 33, { align: 'center' })
 
-      // Meta info
-      doc.setFontSize(8.5)
-      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5); doc.setFont('helvetica', 'normal')
       let y = 41
       doc.text(`Invoice #: ${sale.invoice_number}`, 10, y)
       doc.text(`Date: ${new Date(sale.sale_date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}`, W - 10, y, { align: 'right' })
       y += 6
-      doc.text(`Payment: ${sale.payment_method}`, 10, y)
-      if (sale.is_credit) {
-        doc.setTextColor(200, 50, 50)
-        doc.text('CREDIT SALE', W - 10, y, { align: 'right' })
-        doc.setTextColor(0)
-      }
-      if (sale.customer_name || sale.market_name) {
-        y += 6
-        if (sale.customer_name) doc.text(`Customer: ${sale.customer_name}`, 10, y)
-        if (sale.market_name) doc.text(`Market: ${sale.market_name}`, W - 10, y, { align: 'right' })
-      }
+      if (sale.customer_name) doc.text(`Customer: ${sale.customer_name}`, 10, y)
 
-      // Items table
-      const rows = (sale.items || []).map((item: any) => [
+      const rows2 = (sale.items || []).map((item: any) => [
         item.product?.name || '',
         String(item.quantity),
         `PKR ${Number(item.sale_price).toLocaleString()}`,
@@ -188,64 +171,29 @@ export default function SalesPage() {
       autoTable(doc, {
         startY: y + 5,
         head: [['Product', 'Qty', 'Unit Price', 'Total']],
-        body: rows,
+        body: rows2,
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [7, 28, 60], textColor: 255 },
-        columnStyles: { 0: { cellWidth: 'auto' }, 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
         margin: { left: 10, right: 10 },
       })
 
       const finalY = (doc as any).lastAutoTable.finalY + 5
+      doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text(`Total Bill:  PKR ${Number(sale.total).toLocaleString()}`, W - 10, finalY, { align: 'right' })
 
-      // Sale total
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'bold')
-      doc.text(`Total:  PKR ${Number(sale.total).toLocaleString()}`, W - 10, finalY, { align: 'right' })
-
-      // Customer balance section
-      let footerY = finalY + 8
-      if (sale.customer_info) {
-        const prev = Number(sale.customer_info.prev_balance)
-        const saleAmt = Number(sale.total)
-        const newBal = sale.is_credit ? prev + saleAmt : prev - saleAmt
-        const fmtBal = (b: number) => b > 0 ? `PKR ${b.toLocaleString()} Due` : b < 0 ? `PKR ${Math.abs(b).toLocaleString()} Advance` : 'PKR 0 (Clear)'
-
-        doc.setDrawColor(180)
-        doc.line(10, footerY, W - 10, footerY)
-        footerY += 5
-
-        doc.setFontSize(9)
+      const amtPaid = Number(sale.amount_paid || 0)
+      const bal = Number(sale.total) - amtPaid
+      if (amtPaid > 0 || bal !== 0) {
+        let fy = finalY + 6
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
+        doc.text(`Amount Paid:  PKR ${amtPaid.toLocaleString()}`, W - 10, fy, { align: 'right' })
+        fy += 5
         doc.setFont('helvetica', 'bold')
-        doc.text('Account Statement', 10, footerY)
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(8)
-        if (sale.customer_info.phone) doc.text(sale.customer_info.phone, W - 10, footerY, { align: 'right' })
-        footerY += 6
-
-        doc.setFontSize(8.5)
-        doc.text('Previous Balance:', 10, footerY)
-        doc.setTextColor(prev > 0 ? 180 : 30, 30, 30)
-        doc.text(fmtBal(prev), W - 10, footerY, { align: 'right' })
+        doc.setTextColor(bal > 0 ? 180 : 0, 30, 30)
+        doc.text(`Balance:  PKR ${bal.toLocaleString()}`, W - 10, fy, { align: 'right' })
         doc.setTextColor(0)
-        footerY += 5
-
-        doc.text(`This Sale (${sale.is_credit ? 'Credit +' : 'Cash −'}):`, 10, footerY)
-        doc.text(`PKR ${saleAmt.toLocaleString()}`, W - 10, footerY, { align: 'right' })
-        footerY += 5
-
-        doc.setFont('helvetica', 'bold')
-        doc.text('New Balance:', 10, footerY)
-        doc.setTextColor(newBal > 0 ? 180 : 30, 30, 30)
-        doc.text(fmtBal(newBal), W - 10, footerY, { align: 'right' })
-        doc.setTextColor(0)
-        footerY += 8
       }
-
-      // Footer
-      doc.setFontSize(7.5)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(150)
-      doc.text('Thank you for your business!', W / 2, footerY, { align: 'center' })
 
       doc.save(`${sale.invoice_number}.pdf`)
     } catch {
@@ -253,408 +201,267 @@ export default function SalesPage() {
     }
   }
 
-  const completeSale = () => {
-    if (cart.length === 0) { toast.error('Cart is empty'); return }
-    createMutation.mutate({
-      items: cart.map(i => ({
-        product_id: i.product.id,
-        quantity: i.quantity,
-        sale_price: i.sale_price,
-      })),
-      customer_name: customerName.trim() || undefined,
-      market_name: marketName.trim() || undefined,
-      payment_method: paymentMethod,
-      discount: 0,
-      tax: 0,
-      customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : undefined,
-      is_credit: isCredit,
-    })
-  }
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+    <div className="space-y-5">
 
-      {/* ── Left: New Sale Form ── */}
-      <div className="lg:col-span-2">
-        <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <ShoppingCart className="w-5 h-5 text-blue-600" />
-            <h2 className="text-base font-semibold text-gray-900">New Sale</h2>
+      {/* ── New Sale ── */}
+      <div className="card p-5">
+        <h2 className="text-base font-semibold text-gray-900 mb-4">New Sale</h2>
+
+        {/* Header row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Customer</label>
+            <select
+              value={selectedCustomerId}
+              onChange={e => setSelectedCustomerId(e.target.value)}
+              className="input-field text-sm"
+            >
+              <option value="">Walk-in Customer</option>
+              {allCustomers?.map((c: { id: number; name: string; phone: string | null }) => (
+                <option key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</option>
+              ))}
+            </select>
           </div>
-
-          <div className="space-y-3">
-
-            {/* Date */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
-              <input
-                type="date"
-                value={saleDate}
-                onChange={e => setSaleDate(e.target.value)}
-                className="input-field text-sm"
-              />
-            </div>
-
-            {/* Market + Customer */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                  <MapPin className="w-3 h-3 text-blue-500" /> Market
-                </label>
-                <input
-                  value={marketName}
-                  onChange={e => setMarketName(e.target.value)}
-                  className="input-field text-sm"
-                  placeholder="e.g. Saddar Market"
-                />
-              </div>
-              <div>
-                <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
-                  <User2 className="w-3 h-3 text-gray-400" /> Customer
-                </label>
-                <input
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="input-field text-sm"
-                  placeholder="e.g. Ahmed"
-                />
-              </div>
-            </div>
-
-            {/* Registered Customer */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Registered Customer (optional)</label>
-              <select
-                value={selectedCustomerId}
-                onChange={e => {
-                  const id = e.target.value
-                  setSelectedCustomerId(id)
-                  if (id) {
-                    const c = allCustomers?.find((x: { id: number; name: string }) => x.id === parseInt(id))
-                    if (c) setCustomerName(c.name)
-                  } else {
-                    setCustomerName('')
-                  }
-                }}
-                className="input-field text-sm"
-              >
-                <option value="">Select Registered Customer</option>
-                {allCustomers?.map((c: { id: number; name: string; phone: string | null }) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.phone ? ` — ${c.phone}` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Credit Sale toggle */}
-            <div className="flex items-center gap-3 py-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <div
-                  onClick={() => setIsCredit(v => !v)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${isCredit ? 'bg-blue-600' : 'bg-gray-200'}`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isCredit ? 'translate-x-5' : ''}`}
-                  />
-                </div>
-                <span className="text-xs font-medium text-gray-700">Credit Sale</span>
-              </label>
-              {isCredit && (
-                <span className="text-xs text-red-600 font-medium">Will be recorded as outstanding balance</span>
-              )}
-            </div>
-
-            {/* Product dropdown */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Product</label>
-              <div className="relative">
-                <select
-                  value={selectedProductId}
-                  onChange={handleProductChange}
-                  className="input-field text-sm appearance-none pr-8"
-                >
-                  <option value="">Select Product</option>
-                  {products?.map((p: Product) => (
-                    <option key={p.id} value={p.id} disabled={p.stock === 0}>
-                      {p.stock === 0 ? `[Out of Stock] ${p.name}` : `${p.name} — Stock: ${p.stock} ${p.unit}`}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
-              {/* Show stock info when a product is selected */}
-              {selectedProduct && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Available stock: <span className="font-medium text-gray-600">{selectedProduct.stock} {selectedProduct.unit}</span>
-                  {' · '}Purchase price: <span className="font-medium text-gray-600">PKR {Number(selectedProduct.purchase_price).toLocaleString()}</span>
-                </p>
-              )}
-            </div>
-
-            {/* Quantity */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
-              <input
-                type="number"
-                value={quantity}
-                onChange={e => {
-                  const v = e.target.value
-                  setQuantity(v === '' ? '' : Math.max(1, parseInt(v) || 1))
-                }}
-                className="input-field text-sm"
-                placeholder="Enter quantity"
-                min="1"
-                max={selectedProduct?.stock || undefined}
-              />
-            </div>
-
-            {/* Sale Price */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Sale Price (PKR)</label>
-              <input
-                type="number"
-                value={salePrice}
-                onChange={e => setSalePrice(parseFloat(e.target.value) || 0)}
-                className="input-field text-sm"
-                min="0"
-                step="0.01"
-              />
-            </div>
-
-            {/* Totals row */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-gray-50 rounded-lg px-3 py-2">
-                <span className="text-gray-500 text-xs block">Total Amount (PKR)</span>
-                <span className="font-semibold text-sm">{(salePrice * (typeof quantity === 'number' ? quantity : 0)).toLocaleString()}</span>
-              </div>
-              <div className="bg-gray-50 rounded-lg px-3 py-2">
-                <span className="text-gray-500 text-xs block">Payment Method</span>
-                <select
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value)}
-                  className="text-sm font-medium bg-transparent border-0 outline-none w-full mt-0.5"
-                >
-                  <option>Cash</option>
-                  <option>Bank Transfer</option>
-                  <option>Card</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={addToCart}
-                disabled={!selectedProductId}
-                className="btn-secondary flex-1 text-sm py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-4 h-4" />
-                Add to Cart
-              </button>
-              <button
-                type="button"
-                onClick={completeSale}
-                disabled={cart.length === 0 || createMutation.isPending}
-                className="btn-primary flex-1 text-sm py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <CheckCircle className="w-4 h-4" />
-                {createMutation.isPending ? 'Processing...' : 'Complete Sale'}
-              </button>
-            </div>
-
-            {/* Cart preview */}
-            {cart.length > 0 && (
-              <div className="border border-gray-100 rounded-lg overflow-hidden mt-1">
-                <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600">
-                  Cart — {cart.length} item{cart.length !== 1 ? 's' : ''}
-                </div>
-                {cart.map(item => (
-                  <div
-                    key={item.product.id}
-                    className="flex items-center justify-between px-3 py-2 border-t border-gray-100 text-sm"
-                  >
-                    <div className="flex-1 min-w-0 mr-3">
-                      <p className="text-gray-800 font-medium text-xs truncate">{item.product.name}</p>
-                      <p className="text-gray-400 text-xs">
-                        {item.quantity} × PKR {item.sale_price.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="font-semibold text-xs text-gray-800">
-                        PKR {(item.quantity * item.sale_price).toLocaleString()}
-                      </span>
-                      <button
-                        onClick={() => removeFromCart(item.product.id)}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                <div className="px-3 py-2.5 bg-blue-50 border-t border-gray-100 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-700">Total</span>
-                  <span className="text-sm font-bold text-blue-700">
-                    PKR {cartTotal.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Info note */}
-            <div className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
-              <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-blue-700">
-                Stock will be automatically deducted after completing sale
-              </p>
-            </div>
-
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+            <input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} className="input-field text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Invoice No</label>
+            <input readOnly value="Auto-generated" className="input-field text-sm bg-gray-50 text-gray-400 cursor-not-allowed" />
           </div>
         </div>
-      </div>
 
-      {/* ── Right: Sales History ── */}
-      <div className="lg:col-span-3">
-        <div className="card">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Sales History</h2>
-          </div>
+        {/* Items table + Summary */}
+        <div className="flex flex-col lg:flex-row gap-4">
 
-          {/* Filters */}
-          <div className="px-5 py-3 flex flex-col sm:flex-row gap-3 border-b border-gray-50">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                className="input-field pl-9 text-sm"
-                placeholder="Search sales..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(1) }}
-              />
-            </div>
-            <div className="relative">
-              <select
-                value={paymentFilter}
-                onChange={e => { setPaymentFilter(e.target.value); setPage(1) }}
-                className="input-field appearance-none pr-8 text-sm w-36"
-              >
-                <option value="">All Sales</option>
-                <option value="Cash">Cash</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Card">Card</option>
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="table-th">Invoice #</th>
-                  <th className="table-th">Date</th>
-                  <th className="table-th hidden md:table-cell">Customer / Market</th>
-                  <th className="table-th hidden sm:table-cell">Items</th>
-                  <th className="table-th">Total (PKR)</th>
-                  <th className="table-th hidden sm:table-cell">Profit (PKR)</th>
-                  <th className="table-th">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {isLoading ? (
-                  <TableLoader cols={7} />
-                ) : salesData?.items?.length === 0 ? (
+          {/* Items table */}
+          <div className="flex-1 min-w-0">
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
                   <tr>
-                    <td colSpan={7}>
-                      <EmptyState title="No sales found" description="Complete your first sale using the form on the left." />
-                    </td>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 w-8">#</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Product</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 w-24">Quantity</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 w-32">Unit Price (PKR)</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 w-28">Total (PKR)</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 w-20">Action</th>
                   </tr>
-                ) : (
-                  salesData?.items?.map((sale: SaleListItem) => (
-                    <tr key={sale.id} className="hover:bg-gray-50/50">
-                      <td className="table-td font-medium text-blue-600 text-xs">{sale.invoice_number}</td>
-                      <td className="table-td text-gray-500 text-xs">{formatShortDate(sale.sale_date)}</td>
-                      <td className="table-td hidden md:table-cell">
-                        <div className="space-y-0.5">
-                          {sale.market_name && (
-                            <div className="flex items-center gap-1 text-xs font-medium text-gray-800">
-                              <MapPin className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                              {sale.market_name}
-                            </div>
-                          )}
-                          {sale.customer_name && (
-                            <div className="flex items-center gap-1 text-xs text-gray-500">
-                              <User2 className="w-3 h-3 flex-shrink-0" />
-                              {sale.customer_name}
-                            </div>
-                          )}
-                          {!sale.market_name && !sale.customer_name && (
-                            <span className="text-xs text-gray-400">Walk-in</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="table-td hidden sm:table-cell text-xs text-gray-600">{sale.item_count}</td>
-                      <td className="table-td font-semibold text-sm">PKR {Number(sale.total).toLocaleString()}</td>
-                      <td className="table-td hidden sm:table-cell text-green-600 font-medium text-sm">
-                        PKR {Number(sale.profit).toLocaleString()}
-                      </td>
-                      <td className="table-td">
-                        <button
-                          onClick={() => setViewingSale(sale)}
-                          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
-                          title="View invoice"
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map((row, idx) => (
+                    <tr key={row.key}>
+                      <td className="px-3 py-2 text-gray-400 text-xs">{idx + 1}</td>
+                      <td className="px-3 py-2">
+                        <select
+                          value={row.product_id}
+                          onChange={e => updateRow(row.key, 'product_id', e.target.value)}
+                          className="input-field text-sm py-1.5"
                         >
-                          <Eye className="w-4 h-4" />
+                          <option value="">Select Product</option>
+                          {products?.map((p: Product) => (
+                            <option key={p.id} value={p.id} disabled={p.stock === 0}>
+                              {p.stock === 0 ? `[Out of Stock] ${p.name}` : p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number"
+                          value={row.quantity}
+                          onChange={e => {
+                            const v = e.target.value
+                            updateRow(row.key, 'quantity', v === '' ? '' : Math.max(1, parseInt(v) || 1))
+                          }}
+                          className="input-field text-sm py-1.5 w-full"
+                          min="1"
+                          placeholder="0"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number"
+                          value={row.unit_price || ''}
+                          onChange={e => updateRow(row.key, 'unit_price', parseFloat(e.target.value) || 0)}
+                          className="input-field text-sm py-1.5 w-full"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-sm font-medium text-gray-800">
+                          {row.total > 0 ? row.total.toLocaleString() : '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => removeRow(row.key)}
+                          disabled={rows.length === 1}
+                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 rounded px-2 py-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Trash2 className="w-3 h-3" /> Remove
                         </button>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={addRow} className="mt-3 flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
+              <Plus className="w-4 h-4" /> Add Product
+            </button>
           </div>
 
-          {salesData && (
-            <div className="px-5 py-4 border-t border-gray-100">
-              <Pagination {...salesData} onPageChange={setPage} />
+          {/* Summary panel */}
+          <div className="lg:w-64 flex-shrink-0">
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                <div className="flex justify-between items-center px-4 py-3">
+                  <span className="text-sm text-gray-600">Total Items</span>
+                  <span className="text-sm font-semibold text-gray-800">{totalItems}</span>
+                </div>
+                <div className="flex justify-between items-center px-4 py-3">
+                  <span className="text-sm text-gray-600">Total Bill (PKR)</span>
+                  <span className="text-base font-bold text-blue-600">{totalBill.toLocaleString()}</span>
+                </div>
+                <div className="px-4 py-3">
+                  <label className="block text-sm text-gray-600 mb-1.5">Amount Paid (PKR)</label>
+                  <input
+                    type="number"
+                    value={amountPaid}
+                    onChange={e => setAmountPaid(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                    className="input-field text-sm"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div className="flex justify-between items-center px-4 py-3">
+                  <span className="text-sm text-gray-600">Remaining Balance (PKR)</span>
+                  <span className={`text-base font-bold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {remaining.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 space-y-2 bg-gray-50">
+                <button
+                  onClick={completeSale}
+                  disabled={createMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {createMutation.isPending ? 'Processing...' : 'Complete Sale'}
+                </button>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
+      {/* ── Sales History ── */}
+      <div className="card">
+        <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-gray-900">Sales History</h2>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              className="input-field pl-9 text-sm w-56"
+              placeholder="Search..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="table-th">Invoice No</th>
+                <th className="table-th">Date</th>
+                <th className="table-th">Customer</th>
+                <th className="table-th">Total Bill (PKR)</th>
+                <th className="table-th">Paid (PKR)</th>
+                <th className="table-th">Balance (PKR)</th>
+                <th className="table-th">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {isLoading ? (
+                <TableLoader cols={7} />
+              ) : salesData?.items?.length === 0 ? (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState title="No sales found" description="Complete your first sale using the form above." />
+                  </td>
+                </tr>
+              ) : (
+                salesData?.items?.map((sale: any) => {
+                  const balance = Number(sale.total) - Number(sale.amount_paid || 0)
+                  return (
+                    <tr key={sale.id} className="hover:bg-gray-50/50">
+                      <td className="table-td font-medium text-blue-600 text-xs">{sale.invoice_number}</td>
+                      <td className="table-td text-gray-500 text-xs">{formatDateTime(sale.sale_date)}</td>
+                      <td className="table-td text-sm text-gray-700">
+                        {sale.customer_name || <span className="text-gray-400">Walk-in</span>}
+                      </td>
+                      <td className="table-td font-semibold text-sm">
+                        {Number(sale.total).toLocaleString()}
+                      </td>
+                      <td className="table-td text-sm text-gray-700">
+                        {Number(sale.amount_paid || 0).toLocaleString()}
+                      </td>
+                      <td className="table-td">
+                        <span className={`text-sm font-semibold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {balance.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="table-td">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setViewingSale(sale)}
+                            className="flex items-center gap-1 text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 rounded px-2 py-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const res = await salesApi.get(sale.id)
+                              printInvoice(res.data)
+                            }}
+                            className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 rounded px-2 py-1"
+                          >
+                            <Printer className="w-3.5 h-3.5" /> Print
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {salesData && (
+          <div className="px-5 py-4 border-t border-gray-100">
+            <Pagination {...salesData} onPageChange={setPage} />
+          </div>
+        )}
+      </div>
+
       {/* ── Sale Detail Modal ── */}
-      <Modal
-        isOpen={!!viewingSale}
-        onClose={() => setViewingSale(null)}
-        title={`Invoice: ${viewingSale?.invoice_number}`}
-        size="lg"
-      >
+      <Modal isOpen={!!viewingSale} onClose={() => setViewingSale(null)} title={`Invoice: ${viewingSale?.invoice_number}`} size="lg">
         {saleDetail ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-gray-500">Date: </span>
-                <span className="font-medium">{formatShortDate(saleDetail.sale_date)}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Payment: </span>
-                <span className="font-medium">{saleDetail.payment_method}</span>
-              </div>
-              {saleDetail.market_name && (
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-blue-500" />
-                  <span className="text-gray-500">Market: </span>
-                  <span className="font-medium">{saleDetail.market_name}</span>
-                </div>
-              )}
+              <div><span className="text-gray-500">Date: </span><span className="font-medium">{formatDateTime(saleDetail.sale_date)}</span></div>
+              <div><span className="text-gray-500">Payment: </span><span className="font-medium">{saleDetail.payment_method}</span></div>
               {saleDetail.customer_name && (
-                <div className="flex items-center gap-1.5">
-                  <User2 className="w-3.5 h-3.5 text-gray-400" />
-                  <span className="text-gray-500">Customer: </span>
-                  <span className="font-medium">{saleDetail.customer_name}</span>
-                </div>
+                <div><span className="text-gray-500">Customer: </span><span className="font-medium">{saleDetail.customer_name}</span></div>
               )}
             </div>
 
@@ -673,74 +480,46 @@ export default function SalesPage() {
                     <tr key={item.id}>
                       <td className="px-3 py-2 text-gray-800">{item.product?.name}</td>
                       <td className="px-3 py-2 text-right text-gray-600">{item.quantity}</td>
-                      <td className="px-3 py-2 text-right text-gray-600">
-                        PKR {Number(item.sale_price).toLocaleString()}
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium">
-                        PKR {Number(item.total).toLocaleString()}
-                      </td>
+                      <td className="px-3 py-2 text-right text-gray-600">PKR {Number(item.sale_price).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-medium">PKR {Number(item.total).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="bg-gray-50 border-t border-gray-100">
                   <tr>
-                    <td colSpan={3} className="px-3 py-2 text-right font-semibold text-sm">Total</td>
-                    <td className="px-3 py-2 text-right font-bold text-blue-700">
-                      PKR {Number(saleDetail.total).toLocaleString()}
-                    </td>
+                    <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold">Total Bill</td>
+                    <td className="px-3 py-2 text-right font-bold text-blue-700">PKR {Number(saleDetail.total).toLocaleString()}</td>
                   </tr>
+                  <tr>
+                    <td colSpan={3} className="px-3 py-2 text-right text-sm text-gray-500">Amount Paid</td>
+                    <td className="px-3 py-2 text-right font-medium text-gray-700">PKR {Number(saleDetail.amount_paid || 0).toLocaleString()}</td>
+                  </tr>
+                  {(() => {
+                    const bal = Number(saleDetail.total) - Number(saleDetail.amount_paid || 0)
+                    return (
+                      <tr className="bg-red-50">
+                        <td colSpan={3} className="px-3 py-2 text-right text-sm font-semibold text-red-700">Balance</td>
+                        <td className={`px-3 py-2 text-right font-bold ${bal > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          PKR {bal.toLocaleString()}
+                        </td>
+                      </tr>
+                    )
+                  })()}
                 </tfoot>
               </table>
             </div>
 
-            {/* Customer Balance Summary */}
-            {saleDetail.customer_info && (() => {
-              const prev = Number(saleDetail.customer_info.prev_balance)
-              const saleAmt = Number(saleDetail.total)
-              const newBal = saleDetail.is_credit ? prev + saleAmt : prev - saleAmt
-              const fmtBal = (b: number) => b > 0
-                ? { text: `PKR ${b.toLocaleString()} Due`, cls: 'text-red-600' }
-                : b < 0
-                ? { text: `PKR ${Math.abs(b).toLocaleString()} Advance`, cls: 'text-green-600' }
-                : { text: 'PKR 0 (Clear)', cls: 'text-green-600' }
-              const prevFmt = fmtBal(prev)
-              const newFmt = fmtBal(newBal)
-              return (
-                <div className="border border-blue-100 rounded-lg overflow-hidden mt-1">
-                  <div className="bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
-                    Customer: {saleDetail.customer_info.name}
-                    {saleDetail.customer_info.phone && <span className="font-normal ml-2 text-blue-500">{saleDetail.customer_info.phone}</span>}
-                  </div>
-                  <div className="divide-y divide-blue-50">
-                    <div className="flex justify-between px-3 py-2 text-sm">
-                      <span className="text-gray-500">Previous Balance</span>
-                      <span className={`font-medium ${prevFmt.cls}`}>{prevFmt.text}</span>
-                    </div>
-                    <div className="flex justify-between px-3 py-2 text-sm">
-                      <span className="text-gray-500">
-                        This Sale
-                        <span className={`ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded ${saleDetail.is_credit ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-700'}`}>
-                          {saleDetail.is_credit ? 'Credit +' : 'Cash −'}
-                        </span>
-                      </span>
-                      <span className="font-medium text-gray-800">PKR {saleAmt.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between px-3 py-2 text-sm bg-gray-50">
-                      <span className="font-semibold text-gray-700">New Balance</span>
-                      <span className={`font-bold text-base ${newFmt.cls}`}>{newFmt.text}</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-
-            <button
-              onClick={() => printInvoice(saleDetail)}
-              className="btn-primary w-full text-sm mt-2"
-            >
-              <Printer className="w-4 h-4" />
-              Print / Download Invoice
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => printInvoice(saleDetail)} className="btn-primary flex-1 text-sm">
+                <Printer className="w-4 h-4" /> Print / Download Invoice
+              </button>
+              <button
+                onClick={() => { if (confirm('Delete this sale and restore stock?')) deleteMutation.mutate(viewingSale.id); setViewingSale(null) }}
+                className="btn-secondary text-sm text-red-600 border-red-200 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-center py-8">

@@ -23,19 +23,13 @@ interface SupplierFormProps {
 function SupplierForm({ initial, onSubmit, loading, onClose }: SupplierFormProps) {
   const [form, setForm] = useState({
     name: initial?.name || '',
-    contact_person: initial?.contact_person || '',
     phone: initial?.phone || '',
-    email: initial?.email || '',
-    address: initial?.address || '',
     city: initial?.city || '',
-    notes: initial?.notes || '',
     is_active: initial?.is_active !== false,
   })
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const val = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value
-    setForm(f => ({ ...f, [k]: val }))
-  }
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,42 +39,24 @@ function SupplierForm({ initial, onSubmit, loading, onClose }: SupplierFormProps
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Supplier Name *</label>
-          <input value={form.name} onChange={set('name')} className="input-field" placeholder="e.g. Coca Cola Pak" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Contact Person</label>
-          <input value={form.contact_person} onChange={set('contact_person')} className="input-field" placeholder="Full name" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
-          <input value={form.phone} onChange={set('phone')} className="input-field" placeholder="0300-0000000" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-          <input type="email" value={form.email} onChange={set('email')} className="input-field" placeholder="email@example.com" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">City</label>
-          <input value={form.city} onChange={set('city')} className="input-field" placeholder="Lahore" />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Address</label>
-          <textarea value={form.address} onChange={set('address')} className="input-field" rows={2} placeholder="Full address" />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
-          <textarea value={form.notes} onChange={set('notes')} className="input-field" rows={2} placeholder="Additional notes" />
-        </div>
-        {initial && (
-          <div className="col-span-2 flex items-center gap-2">
-            <input type="checkbox" id="is_active" checked={form.is_active} onChange={set('is_active')} className="w-4 h-4 text-blue-600 rounded" />
-            <label htmlFor="is_active" className="text-sm font-medium text-gray-700">Active Supplier</label>
-          </div>
-        )}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Supplier Name *</label>
+        <input value={form.name} onChange={set('name')} className="input-field" placeholder="e.g. Coca Cola Pak" />
       </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
+        <input value={form.phone} onChange={set('phone')} className="input-field" placeholder="0300-0000000" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">City</label>
+        <input value={form.city} onChange={set('city')} className="input-field" placeholder="Lahore" />
+      </div>
+      {initial && (
+        <div className="flex items-center gap-2">
+          <input type="checkbox" id="is_active" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4 text-blue-600 rounded" />
+          <label htmlFor="is_active" className="text-sm font-medium text-gray-700">Active Supplier</label>
+        </div>
+      )}
       <div className="flex items-center gap-3 pt-2">
         <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
         <button type="submit" disabled={loading} className="btn-primary flex-1">{loading ? 'Saving...' : 'Save Supplier'}</button>

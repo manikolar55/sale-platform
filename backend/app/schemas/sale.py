@@ -20,6 +20,7 @@ class SaleCreate(BaseModel):
     notes: Optional[str] = None
     customer_id: Optional[int] = None
     is_credit: bool = False
+    amount_paid: Decimal = Decimal("0")
 
 
 class ProductMinimal(BaseModel):
@@ -61,6 +62,7 @@ class SaleResponse(BaseModel):
     payment_method: str
     notes: Optional[str] = None
     is_credit: bool = False
+    amount_paid: Decimal = Decimal("0")
     customer_id: Optional[int] = None
     sale_date: datetime
     items: List[SaleItemResponse] = []
@@ -75,6 +77,7 @@ class SaleListResponse(BaseModel):
     customer_name: Optional[str] = None
     market_name: Optional[str] = None
     total: Decimal
+    amount_paid: Decimal = Decimal("0")
     profit: Decimal
     payment_method: str
     sale_date: datetime
