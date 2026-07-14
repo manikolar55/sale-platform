@@ -9,7 +9,7 @@ class SaleItem(Base):
     __tablename__ = "sale_items"
     id = Column(Integer, primary_key=True, index=True)
     sale_id = Column(Integer, ForeignKey("sales.id", ondelete="CASCADE"))
-    product_id = Column(Integer, ForeignKey("products.id"))
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     quantity = Column(Integer, nullable=False, default=1)
     sale_price = Column(Numeric(12, 2), nullable=False)
     purchase_price = Column(Numeric(12, 2), nullable=False)

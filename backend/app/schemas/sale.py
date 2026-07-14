@@ -31,7 +31,7 @@ class ProductMinimal(BaseModel):
 
 class SaleItemResponse(BaseModel):
     id: int
-    product_id: int
+    product_id: Optional[int] = None
     quantity: int
     sale_price: Decimal
     purchase_price: Decimal
