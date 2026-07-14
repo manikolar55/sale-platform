@@ -75,12 +75,27 @@ def seed_data(db):
     logger.info("Initial setup complete")
 
 
+def run_migrations(db):
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) NOT NULL DEFAULT 0",
+    ]
+    for sql in migrations:
+        try:
+            db.execute(text(sql))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Migration skipped: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     db = SessionLocal()
     try:
+        run_migrations(db)
         seed_data(db)
         seed_expense_categories(db)
     finally:

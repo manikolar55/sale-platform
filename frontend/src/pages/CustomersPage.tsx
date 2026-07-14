@@ -196,7 +196,7 @@ export default function CustomersPage() {
     queryFn: () => customersApi.list({ page, per_page: 10, search: search || undefined }).then(r => r.data),
   })
 
-  const { data: customerDetail } = useQuery<CustomerDetail>({
+  const { data: customerDetail, isError: detailError } = useQuery<CustomerDetail>({
     queryKey: ['customer-detail', viewingCustomerId],
     queryFn: () => customersApi.get(viewingCustomerId!).then(r => r.data as CustomerDetail),
     enabled: !!viewingCustomerId,
@@ -520,6 +520,10 @@ export default function CustomersPage() {
             {customerDetail.recent_sales.length === 0 && customerDetail.recent_payments.length === 0 && (
               <p className="text-sm text-gray-400 text-center py-4">No transactions yet for this customer.</p>
             )}
+          </div>
+        ) : detailError ? (
+          <div className="flex items-center justify-center py-10 text-sm text-red-500">
+            Failed to load customer details. Please try again.
           </div>
         ) : (
           <div className="flex items-center justify-center py-10">
