@@ -52,7 +52,7 @@ export default function SalesPage() {
     queryFn: () => customersApi.all().then(r => r.data),
   })
 
-  const { data: saleDetail } = useQuery({
+  const { data: saleDetail, isError: saleDetailError } = useQuery({
     queryKey: ['sale-detail', viewingSale?.id],
     queryFn: () => viewingSale ? salesApi.get(viewingSale.id).then(r => r.data) : null,
     enabled: !!viewingSale,
@@ -520,6 +520,10 @@ export default function SalesPage() {
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
+          </div>
+        ) : saleDetailError ? (
+          <div className="flex items-center justify-center py-8 text-sm text-red-500">
+            Failed to load invoice. Please try again.
           </div>
         ) : (
           <div className="flex items-center justify-center py-8">
